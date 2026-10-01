@@ -2,7 +2,11 @@
 
 import { useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
-import { validateEvidenceUri, getSafeEvidenceHref } from '@/lib/validation/evidenceUri';
+import { useClaimDetailProjection } from '@/hooks/useClaimDetailProjection';
+import {
+  sanitizeEvidenceList,
+  SafeEvidenceItem,
+} from '@/lib/security/evidence-sanitizer';
 
 export interface EvidenceViewerProps {
   claimId: string;
@@ -29,13 +33,13 @@ const DEFAULT_EVIDENCE: Array<{ type: string; value: string }> = [
  *  - text renders as React text children only — no innerHTML, ever
  */
 export function EvidenceViewer({
-  claimId: _claimId,
+  claimId,
   evidence: rawEvidence,
 }: EvidenceViewerProps) {
-  void _claimId;
   const [expanded, setExpanded] = useState(true);
+  const projection = useClaimDetailProjection(rawEvidence ? undefined : claimId);
 
-  const evidence = rawEvidence ?? DEFAULT_EVIDENCE;
+  const evidence = sanitizeEvidenceList(rawEvidence ?? projection.data?.claim.evidence ?? []);
 
   return (
     <div className="card p-4 sm:p-6">
@@ -57,33 +61,36 @@ export function EvidenceViewer({
           className="space-y-3 sm:space-y-3 overflow-y-auto overscroll-contain"
           style={{ maxHeight: '60vh', overscrollBehavior: 'contain' }}
         >
-          {evidence.map((e, idx) => {
-            if (e.type === 'link') {
-              const validation = validateEvidenceUri(e.value);
-              const safeHref = getSafeEvidenceHref(e.value);
+          {projection.viewState === 'loading' && !rawEvidence && (
+            <p className="text-sm text-gray-500" role="status" aria-busy="true">Loading canonical evidence...</p>
+          )}
+          {projection.viewState === 'error' && !rawEvidence && (
+            <div className="space-y-2" role="alert">
+              <p className="text-sm text-red-500">Evidence projection unavailable.</p>
+              <button type="button" onClick={projection.retry} className="text-sm text-blue-600 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
+                Try again
+              </button>
+            </div>
+          )}
+          {projection.viewState === 'ready-stale' && !rawEvidence && (
+            <p className="text-sm text-amber-700" role="status">
+              Evidence projection may be outdated. Review before relying on it.
+            </p>
+          )}
+          {evidence.length === 0 && projection.viewState !== 'loading' && projection.viewState !== 'error' && (
+            <p className="text-sm text-gray-500">No evidence available.</p>
+          )}
 
-              if (!validation.isValid || !safeHref) {
-                return (
-                  <div
-                    key={idx}
-                    className="flex items-start gap-2 text-sm text-gray-500 italic py-1"
-                    role="note"
-                    data-testid="evidence-blocked-item"
-                  >
-                    <ShieldAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                    <span>Invalid or unsupported evidence URI: <span className="break-all font-mono text-xs">{e.value}</span></span>
-                  </div>
-                );
-              }
-
+          {evidence.map((e: SafeEvidenceItem, idx) => {
+            if (e.kind === 'link') {
               return (
                 <a
                   key={idx}
-                  href={safeHref}
+                  href={e.href}
                   target="_blank"
-                  rel="noopener noreferrer nofollow"
-                  className="text-blue-600 underline text-sm sm:text-base break-all block py-1 focus-visible:outline-2 focus-visible:outline-[#5b5bf6] rounded"
-                  aria-label={`Evidence link: ${e.value} (opens in new tab)`}
+                  rel={e.rel}
+                  className="text-blue-600 underline text-sm sm:text-base break-all block py-1"
+                  aria-label={`Evidence link: ${e.text} (opens in new tab)`}
                 >
                   {e.value}
                 </a>

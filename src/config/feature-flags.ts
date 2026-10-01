@@ -25,8 +25,9 @@ export type FeatureFlag =
   | 'TRUST_SCORE_DISPLAY'
   | 'NOTIFICATION_BELL'
   | 'ADVANCED_FILTERS'
-  | 'PERFORMANCE_BUDGETS'
-  | 'BETA_FEATURES';
+  | 'BETA_FEATURES'
+  /** V2-FE-149: Privacy-safe error and incident telemetry. */
+  | 'PRIVACY_SAFE_TELEMETRY';
 
 export const FEATURE_FLAG_KEYS = [
   'CLAIM_SUBMISSION',
@@ -131,6 +132,8 @@ export const DEFAULT_FLAGS: Record<FeatureFlag, boolean> = {
   
   // Beta/Experimental
   BETA_FEATURES: false,
+  // V2-FE-149: Privacy-safe telemetry — disabled by default; enabled via env var or runtime toggle
+  PRIVACY_SAFE_TELEMETRY: process.env.NEXT_PUBLIC_FEATURE_PRIVACY_SAFE_TELEMETRY === 'true',
 };
 
 /** Metadata for each flag (owner, env, expiry, safe fallback, invariant protection) */
@@ -278,6 +281,12 @@ export const FLAG_METADATA: Record<FeatureFlag, FeatureFlagMeta> = {
     safeFallback: false,
     protocolInvariantProtected: true,
   },
+  PRIVACY_SAFE_TELEMETRY: {
+    name: 'PRIVACY_SAFE_TELEMETRY',
+    description: 'Enable privacy-safe error and incident telemetry (V2-FE-149). All events are redacted before transport.',
+    defaultValue: false,
+    category: 'experimental',
+  },
 };
 
 /** Runtime type guard for untrusted flag names (API / storage / query) */
@@ -404,9 +413,25 @@ export function isFlagEnabled(
  */
 function getEnvFlags(): Partial<Record<FeatureFlag, boolean>> {
   const envFlags: Partial<Record<FeatureFlag, boolean>> = {};
-
-  for (const key of FEATURE_FLAG_KEYS) {
-    const envKey = `NEXT_PUBLIC_FEATURE_${key}`;
+  
+  // Check for environment variable overrides
+  const envOverrides: Array<{ key: FeatureFlag; envKey: string }> = [
+    { key: 'CLAIM_SUBMISSION', envKey: 'NEXT_PUBLIC_FEATURE_CLAIM_SUBMISSION' },
+    { key: 'CLAIM_DISPUTES', envKey: 'NEXT_PUBLIC_FEATURE_CLAIM_DISPUTES' },
+    { key: 'CLAIM_VERIFICATION', envKey: 'NEXT_PUBLIC_FEATURE_CLAIM_VERIFICATION' },
+    { key: 'WALLET_CONNECTION', envKey: 'NEXT_PUBLIC_FEATURE_WALLET_CONNECTION' },
+    { key: 'WORLDCOIN_VERIFICATION', envKey: 'NEXT_PUBLIC_FEATURE_WORLDCOIN_VERIFICATION' },
+    { key: 'REALTIME_UPDATES', envKey: 'NEXT_PUBLIC_FEATURE_REALTIME_UPDATES' },
+    { key: 'LEADERBOARD', envKey: 'NEXT_PUBLIC_FEATURE_LEADERBOARD' },
+    { key: 'ANALYTICS_DASHBOARD', envKey: 'NEXT_PUBLIC_FEATURE_ANALYTICS_DASHBOARD' },
+    { key: 'TRUST_SCORE_DISPLAY', envKey: 'NEXT_PUBLIC_FEATURE_TRUST_SCORE_DISPLAY' },
+    { key: 'NOTIFICATION_BELL', envKey: 'NEXT_PUBLIC_FEATURE_NOTIFICATION_BELL' },
+    { key: 'ADVANCED_FILTERS', envKey: 'NEXT_PUBLIC_FEATURE_ADVANCED_FILTERS' },
+    { key: 'BETA_FEATURES', envKey: 'NEXT_PUBLIC_FEATURE_BETA_FEATURES' },
+    { key: 'PRIVACY_SAFE_TELEMETRY', envKey: 'NEXT_PUBLIC_FEATURE_PRIVACY_SAFE_TELEMETRY' },
+  ];
+  
+  for (const { key, envKey } of envOverrides) {
     const envValue = process.env[envKey];
     if (envValue === undefined) continue;
     if (envValue === 'true' || envValue === '1') {

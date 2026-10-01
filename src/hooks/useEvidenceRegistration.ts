@@ -14,7 +14,7 @@ import { validateEvidenceUri } from '@/lib/validation/evidenceUri';
 export interface EvidencePayload {
   claimId: string;
   evidenceUri: string;
-  evidenceDigest?: string;
+  evidenceDigest?: string; // e.g. SHA-256 hash of the content
 }
 
 export interface EvidenceValidation {
@@ -70,9 +70,24 @@ export function useEvidenceRegistration(config: UseEvidenceRegistrationConfig = 
       errors.push('Invalid claim mismatch: claimId must be a 32-byte hex string (without 0x)');
     }
 
-    const uriValidation = validateEvidenceUri(payload?.evidenceUri);
-    if (!uriValidation.isValid && uriValidation.error) {
-      errors.push(uriValidation.error);
+    if (!payload.evidenceUri) {
+      errors.push('Evidence URI is required');
+    } else {
+      try {
+        const url = new URL(payload.evidenceUri);
+        if (url.protocol !== 'https:' && url.protocol !== 'ipfs:') {
+          errors.push('Unsupported scheme: only https and ipfs are allowed');
+        }
+        if (payload.evidenceUri.length > 1024) {
+          errors.push('Oversized input: evidence URI must be under 1024 characters');
+        }
+      } catch (err) {
+        errors.push('Invalid Evidence URI');
+      }
+    }
+
+    if (payload.evidenceUri.match(/(password|secret|key|token)=/i)) {
+      errors.push('Raw secrets detected in URI. Please remove sensitive information.');
     }
 
     return {
@@ -80,6 +95,13 @@ export function useEvidenceRegistration(config: UseEvidenceRegistrationConfig = 
       errors
     };
   }, [isConnected, userAddress, currentChainId, expectedChainId, contractAddress, artifactVersion]);
+
+  const encodeEvidenceCall = useCallback((payload: EvidencePayload): string => {
+    // Mock encoding for now
+    const encodedClaimId = payload.claimId.padStart(64, '0');
+    const encodedUri = Buffer.from(payload.evidenceUri).toString('hex').padEnd(64, '0');
+    return SUBMIT_EVIDENCE_SELECTOR + encodedClaimId + encodedUri;
+  }, []);
 
   const submitEvidence = useCallback(async (payload: EvidencePayload): Promise<EvidenceTransaction> => {
     setIsSubmitting(true);
@@ -90,6 +112,10 @@ export function useEvidenceRegistration(config: UseEvidenceRegistrationConfig = 
         throw new Error(validation.errors.join('; '));
       }
 
+      // Encode canonical add or version action
+      const calldata = encodeEvidenceCall(payload);
+
+      // Submission requires a wallet writeContract call
       throw new Error('Evidence registration requires wallet writeContract integration; no synthetic transaction hash is emitted.');
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Submission failed';
@@ -98,14 +124,13 @@ export function useEvidenceRegistration(config: UseEvidenceRegistrationConfig = 
     } finally {
       setIsSubmitting(false);
     }
-  }, [validateEvidence]);
+  }, [validateEvidence, encodeEvidenceCall]);
 
   return {
     validateEvidence,
     submitEvidence,
     isSubmitting,
     error,
-    artifactVersion,
-    contractAddress
+    artifactVersion
   };
 }

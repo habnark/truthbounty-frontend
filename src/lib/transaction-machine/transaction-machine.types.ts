@@ -1,11 +1,11 @@
 /**
- * V2-FE-051 — Shared Transaction State Machine
+ * V2-FE-009 — Shared Transaction State Machine
  * Core type definitions for the canonical Optimism/EVM transaction lifecycle.
  *
- * States (12):
+ * States (11):
  *   idle → preparing → signature-requested → submitted → confirming
  *        → safe → finalized
- *        → replaced | dropped | reverted | indexing | reorged
+ *        → replaced | dropped | reverted | indexing
  *
  * Security invariants:
  *  - txHash is NEVER fabricated; it is null until Wagmi returns a real value
@@ -36,22 +36,21 @@ export type OptimismChainId = (typeof OPTIMISM_CHAIN_IDS)[number];
 // ---------------------------------------------------------------------------
 
 export type TransactionMachineErrorReason =
-  | 'USER_REJECTED'
-  | 'WRONG_NETWORK'
-  | 'REVERT'
-  | 'DROPPED'
-  | 'REPLACED'
-  | 'REORGED'
-  | 'STALE_RECEIPT' // receipt chainId does not match expected
-  | 'INVALID_TRANSITION'
-  | 'INVALID_PERSISTED_STATE';
+  | "USER_REJECTED"
+  | "WRONG_NETWORK"
+  | "REVERT"
+  | "DROPPED"
+  | "REPLACED"
+  | "STALE_RECEIPT" // receipt chainId does not match expected
+  | "INVALID_TRANSITION"
+  | "INVALID_PERSISTED_STATE";
 
 export class TransactionMachineError extends Error {
   readonly reason: TransactionMachineErrorReason;
 
   constructor(reason: TransactionMachineErrorReason, detail?: string) {
-    super(`[TransactionMachine] ${reason}${detail ? `: ${detail}` : ''}`);
-    this.name = 'TransactionMachineError';
+    super(`[TransactionMachine] ${reason}${detail ? `: ${detail}` : ""}`);
+    this.name = "TransactionMachineError";
     this.reason = reason;
   }
 }
@@ -62,7 +61,7 @@ export class TransactionMachineError extends Error {
 
 /** Nothing is happening; wallet may or may not be connected. */
 export interface TxStateIdle {
-  readonly status: 'idle';
+  readonly status: "idle";
   readonly txHash: null;
   readonly chainId: number | null;
   readonly blockNumber: null;
@@ -73,7 +72,7 @@ export interface TxStateIdle {
 
 /** Building the transaction payload; chain/address validation in progress. */
 export interface TxStatePreparing {
-  readonly status: 'preparing';
+  readonly status: "preparing";
   readonly txHash: null;
   readonly chainId: number;
   readonly blockNumber: null;
@@ -84,7 +83,7 @@ export interface TxStatePreparing {
 
 /** Wallet popup is open; waiting for user's signature. */
 export interface TxStateSignatureRequested {
-  readonly status: 'signature-requested';
+  readonly status: "signature-requested";
   readonly txHash: null;
   readonly chainId: number;
   readonly blockNumber: null;
@@ -95,7 +94,7 @@ export interface TxStateSignatureRequested {
 
 /** Transaction has been broadcast to the network; mempool-pending. */
 export interface TxStateSubmitted {
-  readonly status: 'submitted';
+  readonly status: "submitted";
   readonly txHash: `0x${string}`;
   readonly chainId: number;
   readonly blockNumber: null;
@@ -106,7 +105,7 @@ export interface TxStateSubmitted {
 
 /** Transaction is included in a block; waiting for sufficient confirmations. */
 export interface TxStateConfirming {
-  readonly status: 'confirming';
+  readonly status: "confirming";
   readonly txHash: `0x${string}`;
   readonly chainId: number;
   readonly blockNumber: bigint;
@@ -120,7 +119,7 @@ export interface TxStateConfirming {
  * Not yet L1-finalized.
  */
 export interface TxStateSafe {
-  readonly status: 'safe';
+  readonly status: "safe";
   readonly txHash: `0x${string}`;
   readonly chainId: number;
   readonly blockNumber: bigint;
@@ -134,7 +133,7 @@ export interface TxStateSafe {
  * on-chain projection is reflected in backend state.
  */
 export interface TxStateIndexing {
-  readonly status: 'indexing';
+  readonly status: "indexing";
   readonly txHash: `0x${string}`;
   readonly chainId: number;
   readonly blockNumber: bigint;
@@ -148,7 +147,7 @@ export interface TxStateIndexing {
  * Persisted state is cleared after this is acknowledged.
  */
 export interface TxStateFinalized {
-  readonly status: 'finalized';
+  readonly status: "finalized";
   readonly txHash: `0x${string}`;
   readonly chainId: number;
   readonly blockNumber: bigint;
@@ -162,7 +161,7 @@ export interface TxStateFinalized {
  * Terminal; user may retry from idle.
  */
 export interface TxStateDropped {
-  readonly status: 'dropped';
+  readonly status: "dropped";
   readonly txHash: `0x${string}` | null;
   readonly chainId: number;
   readonly blockNumber: null;
@@ -176,7 +175,7 @@ export interface TxStateDropped {
  * (same nonce, different hash). Terminal.
  */
 export interface TxStateReplaced {
-  readonly status: 'replaced';
+  readonly status: "replaced";
   readonly txHash: `0x${string}`;
   readonly chainId: number;
   readonly blockNumber: null;
@@ -191,31 +190,28 @@ export interface TxStateReplaced {
  * Terminal; user may retry from idle.
  */
 export interface TxStateReverted {
-  readonly status: 'reverted';
+  readonly status: "reverted";
   readonly txHash: `0x${string}`;
   readonly chainId: number;
   readonly blockNumber: bigint;
   readonly confirmations: null;
-  readonly error: 'REVERT';
+  readonly error: "REVERT";
   readonly replacedBy: null;
 }
 
 /**
- * Previously observed receipt was orphaned by a chain reorganization.
- * Terminal; UI must remove success affordances and allow recovery/retry.
- * Driven only by canonical RPC observation — never by timers.
+ * A previously confirmed/safe transaction was reorged out of the canonical chain.
+ * Terminal failure state; user may retry from idle once the new canonical state
+ * has been reconciled against the indexer/API.
  */
 export interface TxStateReorged {
-  readonly status: 'reorged';
+  readonly status: "reorged";
   readonly txHash: `0x${string}`;
   readonly chainId: number;
-  /** Orphaned block number when known from the prior receipt observation. */
   readonly blockNumber: bigint | null;
   readonly confirmations: null;
-  readonly error: 'REORGED';
+  readonly error: "REORG";
   readonly replacedBy: null;
-  /** Block hash that was orphaned, when reported by the RPC/adapter. */
-  readonly orphanedBlockHash: `0x${string}` | null;
 }
 
 /** Discriminated union of all 12 transaction states. */
@@ -233,7 +229,7 @@ export type TransactionState =
   | TxStateReverted
   | TxStateReorged;
 
-export type TransactionStatus = TransactionState['status'];
+export type TransactionStatus = TransactionState["status"];
 
 // ---------------------------------------------------------------------------
 // Event definitions — discriminated union on `type`
@@ -241,29 +237,29 @@ export type TransactionStatus = TransactionState['status'];
 
 /** Begin building a transaction on the specified chain. */
 export interface TxEventPrepare {
-  readonly type: 'PREPARE';
+  readonly type: "PREPARE";
   readonly chainId: number;
 }
 
 /** Wallet popup has opened; signature is pending. */
 export interface TxEventRequestSignature {
-  readonly type: 'REQUEST_SIGNATURE';
+  readonly type: "REQUEST_SIGNATURE";
 }
 
 /** User rejected the signature request in their wallet. */
 export interface TxEventUserRejected {
-  readonly type: 'USER_REJECTED';
+  readonly type: "USER_REJECTED";
 }
 
 /** Transaction broadcast successfully; mempool hash received. */
 export interface TxEventSubmit {
-  readonly type: 'SUBMIT';
+  readonly type: "SUBMIT";
   readonly txHash: `0x${string}`;
 }
 
 /** Transaction included in a block; receipt received. */
 export interface TxEventConfirm {
-  readonly type: 'CONFIRM';
+  readonly type: "CONFIRM";
   readonly blockNumber: bigint;
   readonly confirmations: number;
   /** chainId from the receipt — validated against expected before transition. */
@@ -272,22 +268,22 @@ export interface TxEventConfirm {
 
 /** Sufficient confirmations have accumulated; mark as safe. */
 export interface TxEventMarkSafe {
-  readonly type: 'MARK_SAFE';
+  readonly type: "MARK_SAFE";
 }
 
 /** Indexer has begun processing; waiting for backend acknowledgement. */
 export interface TxEventIndexing {
-  readonly type: 'INDEXING';
+  readonly type: "INDEXING";
 }
 
 /** Indexer has confirmed; transaction is fully finalized. */
 export interface TxEventFinalize {
-  readonly type: 'FINALIZE';
+  readonly type: "FINALIZE";
 }
 
 /** Transaction was dropped from the mempool. */
 export interface TxEventDrop {
-  readonly type: 'DROP';
+  readonly type: "DROP";
 }
 
 /**
@@ -295,34 +291,28 @@ export interface TxEventDrop {
  * The caller must provide the replacement hash.
  */
 export interface TxEventReplace {
-  readonly type: 'REPLACE';
+  readonly type: "REPLACE";
   readonly replacedBy: `0x${string}`;
 }
 
 /** EVM execution reverted. */
 export interface TxEventRevert {
-  readonly type: 'REVERT';
+  readonly type: "REVERT";
 }
 
-
-/**
- * Canonical receipt for a previously observed inclusion was orphaned (reorg).
- * Must be driven by RPC/receipt observation — never by wall-clock timers.
- */
+/** Previously confirmed transaction was reorged out of the canonical chain. */
 export interface TxEventReorg {
-  readonly type: 'REORG';
-  /** Orphaned block hash when known from the provider. */
-  readonly orphanedBlockHash?: `0x${string}`;
+  readonly type: "REORG";
 }
 
-/** Reset a terminal failure state (dropped, reverted, reorged) back to idle for retry. */
+/** Reset a terminal failure state (dropped, reverted) back to idle for retry. */
 export interface TxEventRetry {
-  readonly type: 'RETRY';
+  readonly type: "RETRY";
 }
 
 /** Unconditional reset — always returns to idle. Used for cleanup. */
 export interface TxEventReset {
-  readonly type: 'RESET';
+  readonly type: "RESET";
 }
 
 /** Discriminated union of all legal machine events. */
@@ -342,7 +332,7 @@ export type TransactionEvent =
   | TxEventRetry
   | TxEventReset;
 
-export type TransactionEventType = TransactionEvent['type'];
+export type TransactionEventType = TransactionEvent["type"];
 
 // ---------------------------------------------------------------------------
 // Persistence context
@@ -371,14 +361,14 @@ export interface TransactionContext {
 // ---------------------------------------------------------------------------
 
 /** Terminal success states — persisted state is cleared after acknowledgement. */
-const TERMINAL_SUCCESS = new Set<TransactionStatus>(['finalized']);
+const TERMINAL_SUCCESS = new Set<TransactionStatus>(["finalized"]);
 
 /** Terminal failure states — user may retry. */
 const TERMINAL_FAILURE = new Set<TransactionStatus>([
-  'dropped',
-  'replaced',
-  'reverted',
-  'reorged',
+  "dropped",
+  "replaced",
+  "reverted",
+  "reorged",
 ]);
 
 export function isTerminalSuccess(s: TransactionStatus): boolean {
@@ -402,15 +392,13 @@ export function isContradictoryTransition(
   from: TransactionStatus,
   to: TransactionStatus,
 ): boolean {
-  if (from === 'reverted' && to === 'safe') return true;
-  if (from === 'reverted' && to === 'finalized') return true;
-  if (from === 'dropped' && to === 'safe') return true;
-  if (from === 'dropped' && to === 'finalized') return true;
-  if (from === 'idle' && to === 'finalized') return true;
-  if (from === 'idle' && to === 'safe') return true;
-  if (from === 'reorged' && to === 'safe') return true;
-  if (from === 'reorged' && to === 'finalized') return true;
-  if (from === 'finalized' && to === 'reorged') return true;
+  if (from === "reverted" && to === "safe") return true;
+  if (from === "reverted" && to === "finalized") return true;
+  if (from === "dropped" && to === "safe") return true;
+  if (from === "dropped" && to === "finalized") return true;
+  if (from === "reorged" && (to === "safe" || to === "finalized")) return true;
+  if (from === "idle" && to === "finalized") return true;
+  if (from === "idle" && to === "safe") return true;
   return false;
 }
 
@@ -419,10 +407,7 @@ export function isContradictoryTransition(
  * In production only OP Mainnet and OP Sepolia are allowed.
  * In test / local-dev Hardhat fork (31337) is also accepted.
  */
-export function isValidChain(
-  chainId: number,
-  allowLocalDev = false,
-): boolean {
+export function isValidChain(chainId: number, allowLocalDev = false): boolean {
   const allowed = allowLocalDev ? ALLOWED_CHAIN_IDS_DEV : OPTIMISM_CHAIN_IDS;
   return (allowed as readonly number[]).includes(chainId);
 }
@@ -445,14 +430,14 @@ export interface ClaimCreationParams {
 
 /** Protocol-level errors surfaced by claim creation. */
 export type ClaimCreationErrorReason =
-  | 'INVALID_CONTENT_DIGEST'
-  | 'INVALID_BOUNTY_ASSET'
-  | 'INVALID_AMOUNT'
-  | 'INSUFFICIENT_ALLOWANCE'
-  | 'SIMULATION_REVERTED'
-  | 'CLAIM_ALREADY_EXISTS'
-  | 'CLAIM_NOT_ELIGIBLE'
-  | 'CLAIM_WINDOW_CLOSED';
+  | "INVALID_CONTENT_DIGEST"
+  | "INVALID_BOUNTY_ASSET"
+  | "INVALID_AMOUNT"
+  | "INSUFFICIENT_ALLOWANCE"
+  | "SIMULATION_REVERTED"
+  | "CLAIM_ALREADY_EXISTS"
+  | "CLAIM_NOT_ELIGIBLE"
+  | "CLAIM_WINDOW_CLOSED";
 
 /** Fully-validated request used to drive allowance/simulation/submission. */
 export interface ClaimCreationRequest {
@@ -469,7 +454,7 @@ export interface ClaimCreationRequest {
 /** Return the canonical idle state. */
 export function createIdleState(): TxStateIdle {
   return {
-    status: 'idle',
+    status: "idle",
     txHash: null,
     chainId: null,
     blockNumber: null,

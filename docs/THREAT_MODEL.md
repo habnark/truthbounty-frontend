@@ -179,7 +179,9 @@ Redaction is enforced by [`src/lib/security/redaction.ts`](../src/lib/security/r
 
 **Rule:** every telemetry/error-reporter call site must use `redactForTelemetry` / `redactError` / `redactForErrorReporter`. No raw `console.error` of payloads in production.
 
+
 The consent UI, state model, and local-only page-view contract are documented in [ANALYTICS_CONSENT.md](./ANALYTICS_CONSENT.md).
+
 
 ---
 

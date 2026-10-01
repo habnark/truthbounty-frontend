@@ -1,8 +1,22 @@
 'use client';
 
-import React, { ErrorInfo, ReactNode, createRef } from 'react';
-import { toSafeErrorMessage } from '@/lib/sanitize-error';
-import { redactError } from '@/lib/security/redaction';
+/**
+ * ErrorBoundary — global React error boundary with privacy-safe telemetry.
+ *
+ * V2-FE-149 — TruthBounty Frontend
+ *
+ * Catches unhandled render errors and:
+ *  1. Reports them via the telemetry library (if PRIVACY_SAFE_TELEMETRY is enabled).
+ *  2. Shows an accessible, user-friendly fallback UI with a Retry button.
+ *
+ * Telemetry is sourced from TelemetryContext so this component only relies on
+ * the singleton `getTelemetryClient()` fallback — it does NOT call React hooks
+ * (class components cannot use hooks). The singleton is initialised by
+ * TelemetryProvider at application boot.
+ */
+
+import React, { ErrorInfo, ReactNode } from 'react'
+import { getTelemetryClient } from '@/lib/telemetry'
 
 export interface ErrorBoundaryProps {
   children: ReactNode;
@@ -46,30 +60,25 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    const redacted = redactError(error);
-    // Fail closed: log the redacted form only, never propagate sensitive
-    // detail to telemetry console streams.
-    console.error(
-      'ErrorBoundary caught:',
-      this.props.scope ?? 'global',
-      redacted.name,
-      redacted.message,
-      redacted.stack,
-      { cause: redacted.cause, componentStack: errorInfo.componentStack ? redactErrorInfoStack(errorInfo.componentStack) : null },
-    );
-    this.props.onError?.(error, errorInfo, this.props.scope);
-  }
-
-  componentDidUpdate(prevProps: ErrorBoundaryProps, prevState: ErrorBoundaryState) {
-    if (!this.state.hasError) return;
-    if (!prevState.hasError) {
-      this.retryRef.current?.focus();
-      return;
+    // Report to privacy-safe telemetry (no-op when flag is disabled)
+    try {
+      getTelemetryClient().captureError(error, {
+        category: 'boundary_error',
+        severity: 'fatal',
+        context: {
+          componentStack: errorInfo.componentStack
+            ? String(errorInfo.componentStack).slice(0, 1024)
+            : undefined,
+        },
+      })
+    } catch {
+      // Telemetry must never surface to the user
     }
-    const prev = prevProps.resetKeys ?? [];
-    const next = this.props.resetKeys ?? [];
-    if (prev.length !== next.length || prev.some((v, i) => !Object.is(v, next[i]))) {
-      this.handleRetry();
+
+    // Development-only verbose logging
+    if (process.env.NODE_ENV === 'development') {
+      // eslint-disable-next-line no-console
+      console.error('[ErrorBoundary] Caught unhandled error:', error, errorInfo)
     }
   }
 
@@ -94,12 +103,12 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       }
       return (
         <div
+          className="flex min-h-screen items-center justify-center bg-gray-50 px-4"
           role="alert"
           aria-live="assertive"
-          className="flex min-h-[40vh] items-center justify-center px-4 py-10"
         >
-          <div className="w-full max-w-md rounded-lg bg-white p-6 text-center shadow-lg dark:bg-gray-900">
-            <h2 className="mb-3 text-xl font-semibold text-red-600">
+          <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
+            <h2 className="text-xl font-semibold text-red-600 mb-3">
               Something went wrong
             </h2>
             <p className="mb-2 text-gray-600 dark:text-gray-300">{message}</p>
@@ -111,7 +120,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               autoFocus
               type="button"
               onClick={this.handleRetry}
-              className="rounded bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"
+              aria-label="Retry after error"
             >
               Try again
             </button>
@@ -123,9 +133,4 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 }
 
-function redactErrorInfoStack(componentStack: string): string {
-  const r = redactError({ message: '', stack: componentStack });
-  return r.stack ?? '';
-}
-
-export default ErrorBoundary;
+export default ErrorBoundary

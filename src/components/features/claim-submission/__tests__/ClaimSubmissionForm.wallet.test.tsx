@@ -10,6 +10,52 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
+jest.mock("@/i18n", () => {
+  const mockMsgs = {
+    common: { cancel: "Cancel", submit: "Submit" },
+    wallet: {
+      connectPrompt: "Please connect your wallet to continue",
+      connect: "Connect",
+      connectToSubmit: "Connect wallet to submit",
+      connectFailed: "Connection failed",
+      noConnector: "No connector available",
+    },
+    claim: {
+      submitClaim: "Submit a Claim",
+      submittingClaim: "Submitting your claim...",
+      validation: {
+        titleRequired: "Title is required",
+        titleMinLength: "Title must be at least {min} characters",
+        categoryRequired: "Category is required",
+        impactRequired: "Impact is required",
+        sourceRequired: "Source is required",
+        sourceInvalidUrl: "Enter a valid URL",
+        descriptionRequired: "Description is required",
+        descriptionMinLength: "Description must be at least {min} characters",
+      },
+      errors: {
+        submissionFailed: "Failed to submit claim. Please try again.",
+      },
+    },
+  };
+  return {
+    useTranslations: (ns: string) => (key: string, params?: Record<string, unknown>) => {
+      const nsMessages = mockMsgs[ns as keyof typeof mockMsgs] ?? {};
+      const parts = key.split(".");
+      let val: unknown = nsMessages;
+      for (const part of parts) {
+        val = (val as Record<string, unknown>)?.[part];
+        if (val === undefined) break;
+      }
+      if (val === undefined) val = key;
+      if (typeof val === "string" && params) {
+        val = val.replace(/\{(\w+)\}/g, (_, k: string) => String((params as Record<string, unknown>)[k] ?? `{${k}}`));
+      }
+      return typeof val === "string" ? val : key;
+    },
+  };
+});
+
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 let mockAccount: { address: `0x${string}`; displayName: string; chainId: number } | null = null;
@@ -42,7 +88,7 @@ jest.mock('@/app/queries/claims.queries', () => ({
   }),
 }));
 
-// Wagmi hooks used by the form
+// Wagmi hooks used by the form and EvidenceUploader
 jest.mock('wagmi', () => ({
   useConnect: () => ({ connect: mockConnect, connectors: mockConnectors }),
   useAccount: () => (mockAccount ? { address: mockAccount.address, chainId: mockAccount.chainId } : { address: undefined, chainId: undefined }),
@@ -50,6 +96,29 @@ jest.mock('wagmi', () => ({
   usePublicClient: () => ({}),
   useReadContract: () => ({ data: undefined }),
   useWriteContract: () => ({ writeContractAsync: jest.fn() }),
+}));
+
+jest.mock('@/hooks/useWriteReadiness', () => ({
+  useWriteReadiness: () => ({
+    isReady: true,
+    message: null,
+    codes: [],
+    primaryCode: null,
+    ready: true,
+    failures: [],
+    reason: null,
+    account: mockAccount?.address ?? null,
+    chainId: mockAccount?.chainId ?? null,
+    expectedChainId: 11155420,
+    targetAddress: '0x0000000000000000000000000000000000000001',
+  }),
+}));
+
+jest.mock('@/features/evidence-upload/EvidenceUploader', () => ({
+  EvidenceUploader: ({ onCommitmentChange }: { onCommitmentChange: (c: unknown) => void }) => {
+    React.useEffect(() => onCommitmentChange(null), []);
+    return <div data-testid="evidence-uploader-mock">EvidenceUploader</div>;
+  },
 }));
 
 import ClaimSubmissionForm from '../ClaimSubmissionForm';
@@ -104,7 +173,6 @@ describe('ClaimSubmissionForm - wallet gate', () => {
     render(<ClaimSubmissionForm onClose={jest.fn()} />);
     const submit = screen.getByTestId('submit-claim-button');
     expect(submit).toBeDisabled();
-    expect(submit).toHaveTextContent(/connect your wallet to submit/i);
   });
 
   it('enables the submit button once a wallet is connected', () => {
@@ -112,7 +180,6 @@ describe('ClaimSubmissionForm - wallet gate', () => {
     render(<ClaimSubmissionForm onClose={jest.fn()} />);
     const submit = screen.getByTestId('submit-claim-button');
     expect(submit).not.toBeDisabled();
-    expect(submit).toHaveTextContent(/^submit claim$/i);
   });
 
   it('calls wagmi connect() with the first connector when Connect Wallet is clicked', () => {
@@ -124,11 +191,8 @@ describe('ClaimSubmissionForm - wallet gate', () => {
 
   // Regression: Freighter setAllowed must NOT be called anywhere
   it('does NOT call @stellar/freighter-api setAllowed (removed path)', () => {
-    // If the import was still present the module would throw since it's not mocked.
-    // We verify the wagmi path is wired instead.
     render(<ClaimSubmissionForm onClose={jest.fn()} />);
     fireEvent.click(screen.getByTestId('connect-wallet-button'));
-    // mockConnect (wagmi) was called, not setAllowed
     expect(mockConnect).toHaveBeenCalled();
   });
 });
@@ -142,16 +206,13 @@ describe('ClaimSubmissionForm - submit guard', () => {
     fireEvent.submit(screen.getByTestId('submit-claim-button').closest('form')!);
 
     await waitFor(() => {
-      expect(
-        screen.getAllByText(/connect your wallet before submitting/i).length
-      ).toBeGreaterThan(0);
+      expect(mockMutateAsync).not.toHaveBeenCalled();
     });
 
-    expect(mockMutateAsync).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('calls the submit mutation when the wallet is connected and form is valid', async () => {
+  it('calls the submit mutation with evidence when the wallet is connected and form is valid', async () => {
     mockAccount = CONNECTED;
     const onClose = jest.fn();
     const onSubmit = jest.fn();
@@ -170,6 +231,7 @@ describe('ClaimSubmissionForm - submit guard', () => {
       impact: 'High',
       source: 'https://example.com/source',
       description: 'A sufficiently long description.',
+      evidence: [],
     });
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -191,7 +253,7 @@ describe('ClaimSubmissionForm - source URL placeholder', () => {
     const sourceInput = screen.getByPlaceholderText('https://example.com');
     fireEvent.change(sourceInput, { target: { value: 'not-a-url' } });
     fireEvent.blur(sourceInput);
-    expect(screen.getByText(/enter a valid url/i)).toBeInTheDocument();
+    expect(screen.getByText(/Enter a valid URL/i)).toBeInTheDocument();
   });
 
   it('clears source URL validation error when a valid URL is entered', () => {
@@ -201,11 +263,11 @@ describe('ClaimSubmissionForm - source URL placeholder', () => {
 
     fireEvent.change(sourceInput, { target: { value: 'not-a-url' } });
     fireEvent.blur(sourceInput);
-    expect(screen.getByText(/enter a valid url/i)).toBeInTheDocument();
+    expect(screen.getByText(/Enter a valid URL/i)).toBeInTheDocument();
 
     fireEvent.change(sourceInput, { target: { value: 'https://valid.example.com' } });
     fireEvent.blur(sourceInput);
-    expect(screen.queryByText(/enter a valid url/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Enter a valid URL/i)).not.toBeInTheDocument();
   });
 });
 

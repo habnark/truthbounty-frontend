@@ -5,10 +5,7 @@ export { QueryDevtools, shouldRenderDevtools } from './QueryDevtools';
 export { WebSocketProvider, useWebSocketContext, useWebSocketStatus } from './WebSocketProvider';
 export { ThemeProvider, useTheme } from './ThemeProvider';
 export { Web3Provider, RainbowKitThemedProvider } from './Web3Provider';
-export {
-  SessionLifecycleProvider,
-  useSessionLifecycleContext,
-} from './SessionLifecycleProvider';
+export { WalletStateGuard } from './WalletStateGuard';
 
 // Feature Flags
 export { 
@@ -23,3 +20,11 @@ export {
   FeatureFlagDisabled 
 } from './FeatureFlag';
 export { FeatureFlagPanel } from './FeatureFlagPanel';
+
+// Telemetry — V2-FE-149
+export {
+  TelemetryProvider,
+  TelemetryContext,
+  useTelemetryContext,
+} from './TelemetryProvider';
+export type { TelemetryContextValue, TelemetryProviderProps } from './TelemetryProvider';

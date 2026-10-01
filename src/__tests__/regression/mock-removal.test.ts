@@ -1,14 +1,11 @@
-import fs from 'fs';
-import path from 'path';
-
 // ---------------------------------------------------------------------------
-// 8. Feature-branch regression checks — no mock/placeholder runtime deps
+// 8. V2-FE-046 — identity invalidation has no mock/simulator deps
 // ---------------------------------------------------------------------------
 
-describe('V2-FE-047 — secure SIWE session UX has no mock/placeholder dependencies', () => {
+describe('wallet identity invalidation — no mock/placeholder runtime dependencies', () => {
   const productionFiles = [
-    path.resolve(__dirname, '../../lib/auth/siwe-presentation.ts'),
-    path.resolve(__dirname, '../../components/auth/SiweSessionPanel.tsx'),
+    path.resolve(__dirname, '../../lib/wallet/identity.ts'),
+    path.resolve(__dirname, '../../hooks/useWalletIdentityInvalidation.ts'),
   ];
 
   it.each(productionFiles)('%s does not import mocks or simulators', (filePath) => {
@@ -17,43 +14,15 @@ describe('V2-FE-047 — secure SIWE session UX has no mock/placeholder dependenc
     expect(content).not.toContain('Math.random');
   });
 
-  it('siwe-presentation.ts is pure — no React, wallet SDK, or storage imports', () => {
-    const filePath = path.resolve(__dirname, '../../lib/auth/siwe-presentation.ts');
+  it('identity policy is pure — no wallet SDK, React, or storage imports', () => {
+    const filePath = path.resolve(__dirname, '../../lib/wallet/identity.ts');
     const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).not.toMatch(/from 'react'|from 'wagmi'|localStorage|sessionStorage/);
-  });
-
-  it('identity page never fabricates a wallet address', () => {
-    const filePath = path.resolve(__dirname, '../../app/(dashboard)/identity/page.tsx');
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).not.toContain('Math.random');
-    expect(content).not.toMatch(/mockAddress/i);
-  });
-});
-
-describe('V2-FE-048 — session lifecycle has no mock/placeholder dependencies', () => {
-  const productionFiles = [
-    path.resolve(__dirname, '../../lib/auth/session-lifecycle.ts'),
-    path.resolve(__dirname, '../../lib/auth/session-sync.ts'),
-    path.resolve(__dirname, '../../hooks/useSessionLifecycle.ts'),
-    path.resolve(__dirname, '../../components/auth/SessionLifecycleBanner.tsx'),
-  ];
-
-  it.each(productionFiles)('%s does not import mocks or simulators', (filePath) => {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).not.toMatch(/mock-wagmi|transaction-simulator|@stellar\/freighter-api/i);
-    expect(content).not.toContain('Math.random');
-  });
-
-  it('session-lifecycle policy is pure — no React, wallet SDK, or storage', () => {
-    const filePath = path.resolve(__dirname, '../../lib/auth/session-lifecycle.ts');
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).not.toMatch(/from 'react'|from 'wagmi'|localStorage|sessionStorage/);
+    expect(content).not.toMatch(/from 'wagmi'|from 'react'|localStorage|sessionStorage/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 9. Production bundle must not import mock datasets or fabricate runtime state
+// 8b. Production bundle must not import mock datasets or fabricate runtime state
 // ---------------------------------------------------------------------------
 
 describe('production bundle — mock isolation', () => {

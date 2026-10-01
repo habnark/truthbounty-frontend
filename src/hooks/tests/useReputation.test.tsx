@@ -1,22 +1,26 @@
-import { renderHook, act } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import { useReputation } from "../useReputation";
 
-describe("useReputation", () => {
-  it("should return default reputation score and tier", () => {
-    const { result } = renderHook(() => useReputation("user1"));
-    expect(result.current.score).toBe(0);
-    expect(result.current.tier).toBe("bronze");
-  });
+jest.mock("@/app/queries/reputation.queries", () => ({
+  useReputationByUser: jest.fn(() => ({
+    data: {
+      score: 12,
+      rank: 4,
+      totalVerifications: 8,
+      successfulVerifications: 7,
+      accuracy: 0.875,
+    },
+    isLoading: false,
+    isError: false,
+  })),
+}));
 
-  it("should update reputation score with positive and negative increments", () => {
+describe("useReputation", () => {
+  it("returns the query-backed reputation projection", () => {
     const { result } = renderHook(() => useReputation("user1"));
-    act(() => {
-      result.current.addPositive();
-    });
-    expect(result.current.score).toBe(1);
-    act(() => {
-      result.current.addNegative();
-    });
-    expect(result.current.score).toBe(0);
+    expect(result.current.reputation?.score).toBe(12);
+    expect(result.current.reputation?.rank).toBe(4);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.isError).toBe(false);
   });
 });

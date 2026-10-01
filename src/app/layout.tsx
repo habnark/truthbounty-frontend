@@ -5,7 +5,6 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { ThemeInitScript } from "@/lib/theme-init";
 import { NONCE_HEADER } from "@/lib/security/headers";
-import { AnalyticsConsentManager } from "@/components/analytics/AnalyticsConsentManager";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,8 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Truth Bounty - Decentralized Claim Verification",
-  description:
-    "A decentralized protocol for verifying claims through community consensus and staking",
+  description: "A decentralized protocol for verifying claims through community consensus and staking",
 };
 
 export default async function RootLayout({
@@ -38,20 +36,18 @@ export default async function RootLayout({
         <ThemeInitScript nonce={nonce} />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {/* Skip link for keyboard users */}
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 bg-white text-black px-3 py-2 rounded"
-        >
-          Skip to content
-        </a>
+    {/* Skip link for keyboard users */}
+    <a
+      href="#main"
+      className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 bg-white text-black px-3 py-2 rounded"
+    >
+      Skip to content
+    </a>
 
     <Providers>
-      <AnalyticsConsentManager>
-        <main id="main" tabIndex={-1} role="main">
-          {children}
-        </main>
-      </AnalyticsConsentManager>
+      <main id="main" tabIndex={-1} role="main">
+        {children}
+      </main>
     </Providers>
   </body>
 </html>

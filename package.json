@@ -8,7 +8,8 @@
     "verify-performance-budgets": "node scripts/verify-performance-budgets.mjs",
     "test:production-smoke": "node scripts/production-smoke.mjs",
     "test:production-smoke:unit": "node --test scripts/__tests__/production-smoke.test.mjs",
-    "prebuild": "node scripts/verify-artifacts.mjs && node scripts/verify-production-boundaries.mjs source",
+    "verify-accessibility": "node scripts/verify-accessibility.mjs",
+    "prebuild": "node scripts/verify-artifacts.mjs && node scripts/verify-production-boundaries.mjs source && node scripts/verify-accessibility.mjs",
     "build": "next build",
     "postbuild": "node scripts/verify-production-boundaries.mjs bundle && node scripts/verify-performance-budgets.mjs && node scripts/verify-staging-smoke.mjs",
     "start": "next start",
@@ -20,6 +21,7 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test:a11y": "jest --runInBand src/__tests__/accessibility",
+    "verify:accessibility": "node scripts/verify-accessibility.mjs",
     "verify:staging-smoke": "node scripts/verify-staging-smoke.mjs"
   },
   "dependencies": {

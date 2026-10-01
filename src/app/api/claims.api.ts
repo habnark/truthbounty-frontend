@@ -11,6 +11,9 @@ import {
   type ClaimsListParams,
 } from '@/app/types/claim-list';
 
+type EvidenceItem = Record<string, unknown>;
+type RoundItem = Record<string, unknown>;
+
 export interface ClaimSubmissionData {
   title: string;
   description: string;
@@ -43,8 +46,40 @@ export async function submitClaim(payload: ClaimSubmissionData): Promise<Claim> 
 }
 
 export async function fetchClaimsByStatus(status: string): Promise<Claim[]> {
-  const res = await fetch(`/api/claims?status=${status}`);
+  const res = await fetch(`/api/claims?status=${encodeURIComponent(status)}`);
   if (!res.ok) throw new Error('Failed to fetch claims by status');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Evidence
+// ---------------------------------------------------------------------------
+
+export async function fetchEvidence(claimId: string): Promise<EvidenceItem[]> {
+  const res = await fetch(`/api/claims/${encodeURIComponent(claimId)}/evidence`);
+  if (!res.ok) throw new Error('Failed to fetch evidence');
+  return res.json();
+}
+
+export async function fetchEvidenceDetail(evidenceId: string): Promise<EvidenceItem> {
+  const res = await fetch(`/api/evidence/${encodeURIComponent(evidenceId)}`);
+  if (!res.ok) throw new Error('Failed to fetch evidence detail');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Rounds
+// ---------------------------------------------------------------------------
+
+export async function fetchRoundsByClaim(claimId: string): Promise<RoundItem[]> {
+  const res = await fetch(`/api/claims/${encodeURIComponent(claimId)}/rounds`);
+  if (!res.ok) throw new Error('Failed to fetch rounds');
+  return res.json();
+}
+
+export async function fetchRoundDetail(roundId: string): Promise<RoundItem> {
+  const res = await fetch(`/api/rounds/${encodeURIComponent(roundId)}`);
+  if (!res.ok) throw new Error('Failed to fetch round detail');
   return res.json();
 }
 
@@ -208,3 +243,4 @@ export async function fetchClaimsList(
 
   return assertClaimsListEnvelope(payload);
 }
+

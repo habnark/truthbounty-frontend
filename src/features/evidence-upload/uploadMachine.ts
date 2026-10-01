@@ -12,7 +12,7 @@ const RETRYABLE: UploadFailure[] = ["network", "stale"];
 export function uploadReducer(state: UploadState, action: UploadAction): UploadState {
   switch (action.type) {
     case "START":
-      return { ...initialUploadState, phase: "hashing", attempt: 1 };
+      return { ...initialUploadState, phase: "hashing", attempt: 1, fileInfo: action.fileInfo };
 
     case "HASHED":
       if (state.phase !== "hashing") return state;

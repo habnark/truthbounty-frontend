@@ -1,16 +1,26 @@
 /**
- * Unit tests for V2-FE-063 query key factories.
- * Covers chain, wallet, claim, projection watermark, filters, finality,
+ * Unit tests for canonical query key factories (V2-FE-020 & V2-FE-063).
+ * Covers chain, wallet, claim, evidence, rounds, disputes, verifications,
+ * rewards, reputation, projection watermark, filters, finality,
  * collision resistance, and fail-closed wallet scope normalization.
  */
 
 import {
   chainKeys,
   claimKeys,
+  claimsKeys,
+  evidenceKeys,
+  roundsKeys,
+  disputesKeys,
+  verificationsKeys,
+  rewardsKeys,
+  reputationKeys,
+  projectionWatermarkKeys,
   filterKeys,
   finalityKeys,
+  userKeys,
+  leaderboardKeys,
   normalizeAddress,
-  projectionWatermarkKeys,
   queryKeys,
   walletKeys,
   walletScope,
@@ -108,11 +118,24 @@ describe('claimKeys', () => {
     expect(claimKeys.detail('claim-1')).toEqual(['claims', 'claim-1']);
   });
 
+  it('lists() returns a stable lists key', () => {
+    expect(claimKeys.lists()).toEqual(['claims', 'list']);
+  });
+
   it('encodes list filters to prevent filter collisions', () => {
     const a = claimKeys.list({ status: 'OPEN' });
     const b = claimKeys.list({ status: 'CLOSED' });
     expect(a).toEqual(['claims', 'list', { status: 'OPEN' }]);
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+  });
+
+  it('byStatus scopes to status', () => {
+    expect(claimKeys.byStatus('OPEN')).toEqual(['claims', 'status', 'OPEN']);
+  });
+
+  it('lifecycle and timeline keys are claim-scoped', () => {
+    expect(claimKeys.lifecycle('claim-1')).toEqual(['claims', 'claim-1', 'lifecycle']);
+    expect(claimKeys.timeline('claim-1')).toEqual(['claims', 'claim-1', 'timeline']);
   });
 
   it('wallet-scoped index is chain aware', () => {
@@ -123,10 +146,120 @@ describe('claimKeys', () => {
     );
   });
 
-  it('finality key does not collide with detail', () => {
+  it('finality key supports both chain-scoped and un-scoped forms', () => {
+    expect(claimKeys.finality('claim-1', 10)).toEqual(['claims', 'finality', 'claim-1', 10]);
+    expect(claimKeys.finality('claim-1')).toEqual(['claims', 'finality', 'claim-1']);
     expect(JSON.stringify(claimKeys.finality('claim-1', 10))).not.toBe(
       JSON.stringify(claimKeys.detail('claim-1')),
     );
+  });
+
+  it('claimsKeys is an alias for claimKeys', () => {
+    expect(claimsKeys).toBe(claimKeys);
+  });
+});
+
+describe('evidenceKeys', () => {
+  it('all is the root key', () => {
+    expect(evidenceKeys.all).toEqual(['evidence']);
+  });
+
+  it('byClaim(claimId) scopes to the claim', () => {
+    expect(evidenceKeys.byClaim('claim-2')).toEqual(['evidence', 'claim', 'claim-2']);
+  });
+
+  it('detail(evidenceId) is claim-independent', () => {
+    expect(evidenceKeys.detail('ev-1')).toEqual(['evidence', 'detail', 'ev-1']);
+  });
+});
+
+describe('roundsKeys', () => {
+  it('all is the root key', () => {
+    expect(roundsKeys.all).toEqual(['rounds']);
+  });
+
+  it('byClaim(claimId) scopes correctly', () => {
+    expect(roundsKeys.byClaim('claim-3')).toEqual(['rounds', 'claim', 'claim-3']);
+  });
+
+  it('detail(roundId) is distinct from byClaim', () => {
+    const byClaim = JSON.stringify(roundsKeys.byClaim('r1'));
+    const detail = JSON.stringify(roundsKeys.detail('r1'));
+    expect(byClaim).not.toBe(detail);
+  });
+});
+
+describe('disputesKeys', () => {
+  it('all is the root key', () => {
+    expect(disputesKeys.all).toEqual(['disputes']);
+  });
+
+  it('byClaim(claimId) scopes to the claim', () => {
+    expect(disputesKeys.byClaim('claim-4')).toEqual(['disputes', 'claim', 'claim-4']);
+  });
+
+  it('detail(disputeId) is included', () => {
+    expect(disputesKeys.detail('d-1')).toEqual(['disputes', 'd-1']);
+  });
+
+  it('finality(disputeId) is isolated', () => {
+    expect(disputesKeys.finality('d-1')).toEqual(['disputes', 'finality', 'd-1']);
+  });
+});
+
+describe('verificationsKeys', () => {
+  it('all is the root key', () => {
+    expect(verificationsKeys.all).toEqual(['verifications']);
+  });
+
+  it('byClaim scopes to claim', () => {
+    expect(verificationsKeys.byClaim('claim-5')).toEqual([
+      'verifications',
+      'claim',
+      'claim-5',
+    ]);
+  });
+
+  it('byUser scopes to user', () => {
+    expect(verificationsKeys.byUser('user-1')).toEqual([
+      'verifications',
+      'user',
+      'user-1',
+    ]);
+  });
+});
+
+describe('rewardsKeys', () => {
+  it('all is the root key', () => {
+    expect(rewardsKeys.all).toEqual(['rewards']);
+  });
+
+  it('claimable(address) includes the address', () => {
+    const addr = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
+    expect(rewardsKeys.claimable(addr)).toEqual(['rewards', 'claimable', addr]);
+  });
+
+  it('history(address) is distinct from claimable(address)', () => {
+    const addr = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
+    expect(rewardsKeys.claimable(addr)).not.toEqual(rewardsKeys.history(addr));
+  });
+
+  it('byClaim(claimId) is claim-scoped', () => {
+    expect(rewardsKeys.byClaim('claim-6')).toEqual(['rewards', 'claim', 'claim-6']);
+  });
+});
+
+describe('reputationKeys', () => {
+  it('all is the root key', () => {
+    expect(reputationKeys.all).toEqual(['reputation']);
+  });
+
+  it('byUser(userId) includes the userId', () => {
+    expect(reputationKeys.byUser('user-1')).toEqual(['reputation', 'user', 'user-1']);
+  });
+
+  it('leaderboard is stable', () => {
+    expect(reputationKeys.leaderboard).toEqual(['reputation', 'leaderboard']);
   });
 });
 
@@ -187,11 +320,32 @@ describe('finalityKeys', () => {
   });
 });
 
+describe('userKeys', () => {
+  it('profile(userId) includes the userId', () => {
+    expect(userKeys.profile('u1')).toEqual(['user', 'u1']);
+  });
+
+  it('reputation(userId) nests under profile', () => {
+    expect(userKeys.reputation('u1')).toEqual(['user', 'u1', 'reputation']);
+  });
+
+  it('rewards(userId) does not collide with reputation', () => {
+    expect(userKeys.reputation('u1')).not.toEqual(userKeys.rewards('u1'));
+  });
+});
+
 describe('queryKeys unified export', () => {
-  it('exposes V2-FE-063 factories', () => {
+  it('exposes all domain factories', () => {
     expect(queryKeys.chain).toBe(chainKeys);
     expect(queryKeys.wallet).toBe(walletKeys);
     expect(queryKeys.claims).toBe(claimKeys);
+    expect(queryKeys.claim).toBe(claimKeys);
+    expect(queryKeys.evidence).toBe(evidenceKeys);
+    expect(queryKeys.rounds).toBe(roundsKeys);
+    expect(queryKeys.disputes).toBe(disputesKeys);
+    expect(queryKeys.verifications).toBe(verificationsKeys);
+    expect(queryKeys.rewards).toBe(rewardsKeys);
+    expect(queryKeys.reputation).toBe(reputationKeys);
     expect(queryKeys.projectionWatermark).toBe(projectionWatermarkKeys);
     expect(queryKeys.filters).toBe(filterKeys);
     expect(queryKeys.finality).toBe(finalityKeys);
