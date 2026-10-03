@@ -1,16 +1,19 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi';
 import {
   type Address,
   type Hash,
   type Hex,
   isAddress,
+  isAddressEqual,
   getAddress,
+  maxUint256,
   parseAbi,
 } from 'viem';
 import { evaluateWriteTarget } from '@/lib/contracts/write-gate';
+import { validateAllowance, validateSufficientBalance } from '@/lib/claim-submission/validation';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -45,6 +48,7 @@ export const MAX_FROZEN_CONFIG_BYTE_LENGTH = 1024;
 // ---------------------------------------------------------------------------
 
 const ERC20_ABI = parseAbi([
+  'function balanceOf(address owner) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
 ]);
@@ -75,6 +79,8 @@ export const ClaimCreationErrorCode = {
   TRANSACTION_REVERTED: 'TRANSACTION_REVERTED',
   TX_NOT_FOUND: 'TX_NOT_FOUND',
   ALLOWANCE_INSUFFICIENT: 'ALLOWANCE_INSUFFICIENT',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  SUBMISSION_IN_PROGRESS: 'SUBMISSION_IN_PROGRESS',
   APPROVAL_FAILED: 'APPROVAL_FAILED',
   CLAIM_NOT_INDEXED: 'CLAIM_NOT_INDEXED',
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
@@ -197,7 +203,8 @@ function validateFrozenConfig(frozenConfig: Hex) {
   }
 }
 
-function validateApproval(approval: ClaimCreationParams['approval']) {
+function validateApproval(params: ClaimCreationParams) {
+  const { approval } = params;
   if (!approval) return;
   const { token, spender, requiredAmount } = approval;
   if (!isAddress(token)) {
@@ -212,8 +219,20 @@ function validateApproval(approval: ClaimCreationParams['approval']) {
       `Invalid approval spender address: ${spender}`
     );
   }
-  if (requiredAmount <= 0n) {
-    throw new ClaimCreationError(INVALID_AMOUNT, 'approval.requiredAmount must be positive.');
+  if (requiredAmount <= 0n || requiredAmount > maxUint256) {
+    throw new ClaimCreationError(INVALID_AMOUNT, 'approval.requiredAmount must be a positive uint256.');
+  }
+
+  // The approval config is untrusted input: it must authorize exactly the
+  // claim's asset for the claim contract, and cover the claim amount.
+  if (!isAddressEqual(token, params.asset)) {
+    throw new ClaimCreationError(INVALID_CONFIG, 'Approval token does not match the claim asset.');
+  }
+  if (!isAddressEqual(spender, params.claimContractAddress)) {
+    throw new ClaimCreationError(INVALID_CONFIG, 'Approval spender does not match the claim contract.');
+  }
+  if (requiredAmount < params.amount) {
+    throw new ClaimCreationError(INVALID_AMOUNT, 'Approval amount is below the claim amount.');
   }
 }
 
@@ -241,16 +260,23 @@ function validateParams(
     );
   }
 
+  if (/^0x0{64}$/.test(params.contentDigest)) {
+    throw new ClaimCreationError(
+      INVALID_CONTENT_DIGEST,
+      'contentDigest must not be the zero digest.'
+    );
+  }
+
   if (!isAddress(params.asset)) {
     throw new ClaimCreationError(
       INVALID_ADDRESS,`Invalid asset address: ${params.asset}`
     );
   }
 
-  if (params.amount <= 0n) {
+  if (typeof params.amount !== 'bigint' || params.amount <= 0n || params.amount > maxUint256) {
     throw new ClaimCreationError(
       INVALID_AMOUNT,
-      'amount must be a positive integer (bigint).'
+      'amount must be a positive uint256 integer (bigint).'
     );
   }
 
@@ -272,7 +298,7 @@ function validateParams(
     throw new ClaimCreationError(code, writeTarget.errors.join('; '));
   }
 
-  validateApproval(params.approval);
+  validateApproval(params);
 
   if (!Number.isInteger(expectedChainId) || expectedChainId <= 0) {
     throw new ClaimCreationError(INVALID_CHAIN, 'expectedChainId must be a positive integer network id.');
@@ -340,6 +366,8 @@ export function useClaimCreationTransaction() {
   const [status, setStatus] = useState<ClaimCreationStatus>('idle');
   const [txHash, setTxHash] = useState<Hash | null>(null);
   const [error, setError] = useState<ClaimCreationError | null>(null);
+  // Blocks a second createClaim() (e.g. double click) from starting another signing flow.
+  const inFlight = useRef(false);
 
   const reset = useCallback(() => {
     setStatus('idle');
@@ -347,7 +375,7 @@ export function useClaimCreationTransaction() {
     setError(null);
   }, []);
 
-  const createClaim = useCallback(
+  const runCreateClaim = useCallback(
     async (params: ClaimCreationParams): Promise<ClaimCreationResult> => {
       reset();
 
@@ -392,6 +420,38 @@ export function useClaimCreationTransaction() {
 
       try {
         const account = address;
+
+        // 0. Pre-signing chain checks. Nothing is signed unless the wallet can
+        //    fund the claim and, without an approval step, is already approved.
+        const balance = await publicClient.readContract({
+          address: asset,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [account],
+        });
+        const balanceCheck = validateSufficientBalance(balance, params.amount);
+        if (!balanceCheck.valid) {
+          throw new ClaimCreationError(
+            ClaimCreationErrorCode.INSUFFICIENT_BALANCE,
+            'Insufficient balance of the claim asset to fund this claim.',
+          );
+        }
+
+        if (!params.approval) {
+          const currentAllowance = await publicClient.readContract({
+            address: asset,
+            abi: ERC20_ABI,
+            functionName: 'allowance',
+            args: [account, claimContract],
+          });
+          const allowanceCheck = validateAllowance(currentAllowance, params.amount);
+          if (!allowanceCheck.valid) {
+            throw new ClaimCreationError(
+              ClaimCreationErrorCode.ALLOWANCE_INSUFFICIENT,
+              'The claim contract is not approved to transfer the claim amount.',
+            );
+          }
+        }
 
         // 1. Optional allowance handling.
         if (params.approval) {
@@ -488,6 +548,28 @@ export function useClaimCreationTransaction() {
       }
     },
     [isConnected, address, publicClient, walletClient, connectedChainId, reset],
+  );
+
+  const createClaim = useCallback(
+    async (params: ClaimCreationParams): Promise<ClaimCreationResult> => {
+      if (inFlight.current) {
+        // Leave the running attempt's state untouched.
+        return {
+          status: 'error',
+          error: new ClaimCreationError(
+            ClaimCreationErrorCode.SUBMISSION_IN_PROGRESS,
+            'A claim submission is already in progress.',
+          ),
+        };
+      }
+      inFlight.current = true;
+      try {
+        return await runCreateClaim(params);
+      } finally {
+        inFlight.current = false;
+      }
+    },
+    [runCreateClaim],
   );
 
   return {

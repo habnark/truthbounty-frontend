@@ -16,10 +16,10 @@ jobs:
       MAINTAINER_ALLOWLIST_LOGINS: ${{ vars.MAINTAINER_ALLOWLIST_LOGINS || secrets.MAINTAINER_ALLOWLIST_LOGINS || '' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 

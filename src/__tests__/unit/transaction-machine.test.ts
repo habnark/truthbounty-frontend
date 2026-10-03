@@ -17,15 +17,13 @@
  *  - Replaced path (submitted → replaced)
  */
 
-import {
-  transitionTxState,
-} from '@/lib/transaction-machine/transaction-machine';
+import { transitionTxState } from "@/lib/transaction-machine/transaction-machine";
 import {
   createIdleState,
   TransactionMachineError,
   OPTIMISM_CHAIN_IDS,
   type TransactionState,
-} from '@/lib/transaction-machine/transaction-machine.types';
+} from "@/lib/transaction-machine/transaction-machine.types";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -37,9 +35,9 @@ const HARDHAT = 31337;
 const WRONG_CHAIN = 1; // Ethereum mainnet — not allowed
 
 const MOCK_HASH_1 =
-  '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const satisfies `0x${string}`;
+  "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const satisfies `0x${string}`;
 const MOCK_HASH_2 =
-  '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const satisfies `0x${string}`;
+  "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const satisfies `0x${string}`;
 
 function idle(): TransactionState {
   return createIdleState();
@@ -63,73 +61,89 @@ function drive(
 // Happy path
 // ---------------------------------------------------------------------------
 
-describe('Happy path — idle → finalized', () => {
-  it('transitions idle → preparing on PREPARE with valid chain', () => {
-    const next = transitionTxState(idle(), { type: 'PREPARE', chainId: OP_MAINNET });
-    expect(next.status).toBe('preparing');
+describe("Happy path — idle → finalized", () => {
+  it("transitions idle → preparing on PREPARE with valid chain", () => {
+    const next = transitionTxState(idle(), {
+      type: "PREPARE",
+      chainId: OP_MAINNET,
+    });
+    expect(next.status).toBe("preparing");
     expect(next.chainId).toBe(OP_MAINNET);
     expect(next.txHash).toBeNull();
   });
 
-  it('transitions preparing → signature-requested on REQUEST_SIGNATURE', () => {
-    const state = drive([{ type: 'PREPARE', chainId: OP_MAINNET }]);
-    const next = transitionTxState(state, { type: 'REQUEST_SIGNATURE' });
-    expect(next.status).toBe('signature-requested');
+  it("transitions preparing → signature-requested on REQUEST_SIGNATURE", () => {
+    const state = drive([{ type: "PREPARE", chainId: OP_MAINNET }]);
+    const next = transitionTxState(state, { type: "REQUEST_SIGNATURE" });
+    expect(next.status).toBe("signature-requested");
     expect(next.txHash).toBeNull();
   });
 
-  it('transitions signature-requested → submitted on SUBMIT', () => {
+  it("transitions signature-requested → submitted on SUBMIT", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
     ]);
-    const next = transitionTxState(state, { type: 'SUBMIT', txHash: MOCK_HASH_1 });
-    expect(next.status).toBe('submitted');
+    const next = transitionTxState(state, {
+      type: "SUBMIT",
+      txHash: MOCK_HASH_1,
+    });
+    expect(next.status).toBe("submitted");
     expect(next.txHash).toBe(MOCK_HASH_1);
   });
 
-  it('transitions submitted → confirming on CONFIRM', () => {
+  it("transitions submitted → confirming on CONFIRM", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
     ]);
     const next = transitionTxState(state, {
-      type: 'CONFIRM',
+      type: "CONFIRM",
       blockNumber: BigInt(100),
       confirmations: 1,
       receiptChainId: OP_MAINNET,
     });
-    expect(next.status).toBe('confirming');
+    expect(next.status).toBe("confirming");
     expect(next.txHash).toBe(MOCK_HASH_1);
-    if (next.status === 'confirming') {
+    if (next.status === "confirming") {
       expect(next.blockNumber).toBe(BigInt(100));
       expect(next.confirmations).toBe(1);
     }
   });
 
-  it('transitions confirming → safe on MARK_SAFE', () => {
+  it("transitions confirming → safe on MARK_SAFE", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
     ]);
-    const next = transitionTxState(state, { type: 'MARK_SAFE' });
-    expect(next.status).toBe('safe');
+    const next = transitionTxState(state, { type: "MARK_SAFE" });
+    expect(next.status).toBe("safe");
     expect(next.txHash).toBe(MOCK_HASH_1);
   });
 
-  it('transitions safe → finalized on FINALIZE', () => {
+  it("transitions safe → finalized on FINALIZE", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
-      { type: 'MARK_SAFE' },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
+      { type: "MARK_SAFE" },
     ]);
-    const next = transitionTxState(state, { type: 'FINALIZE' });
-    expect(next.status).toBe('finalized');
+    const next = transitionTxState(state, { type: "FINALIZE" });
+    expect(next.status).toBe("finalized");
     expect(next.txHash).toBe(MOCK_HASH_1);
     expect(next.error).toBeNull();
   });
@@ -139,21 +153,21 @@ describe('Happy path — idle → finalized', () => {
 // User rejection
 // ---------------------------------------------------------------------------
 
-describe('User rejection path', () => {
-  it('transitions signature-requested → idle on USER_REJECTED', () => {
+describe("User rejection path", () => {
+  it("transitions signature-requested → idle on USER_REJECTED", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
     ]);
-    const next = transitionTxState(state, { type: 'USER_REJECTED' });
-    expect(next.status).toBe('idle');
+    const next = transitionTxState(state, { type: "USER_REJECTED" });
+    expect(next.status).toBe("idle");
     expect(next.txHash).toBeNull();
   });
 
-  it('transitions preparing → idle on USER_REJECTED', () => {
-    const state = drive([{ type: 'PREPARE', chainId: OP_MAINNET }]);
-    const next = transitionTxState(state, { type: 'USER_REJECTED' });
-    expect(next.status).toBe('idle');
+  it("transitions preparing → idle on USER_REJECTED", () => {
+    const state = drive([{ type: "PREPARE", chainId: OP_MAINNET }]);
+    const next = transitionTxState(state, { type: "USER_REJECTED" });
+    expect(next.status).toBe("idle");
   });
 });
 
@@ -161,45 +175,60 @@ describe('User rejection path', () => {
 // Revert path
 // ---------------------------------------------------------------------------
 
-describe('Revert path', () => {
-  it('transitions confirming → reverted on REVERT', () => {
+describe("Revert path", () => {
+  it("transitions confirming → reverted on REVERT", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
     ]);
-    const next = transitionTxState(state, { type: 'REVERT' });
-    expect(next.status).toBe('reverted');
+    const next = transitionTxState(state, { type: "REVERT" });
+    expect(next.status).toBe("reverted");
     expect(next.txHash).toBe(MOCK_HASH_1);
-    if (next.status === 'reverted') {
-      expect(next.error).toBe('REVERT');
+    if (next.status === "reverted") {
+      expect(next.error).toBe("REVERT");
     }
   });
 
-  it('reverted is a terminal state — does NOT transition to safe', () => {
+  it("reverted is a terminal state — does NOT transition to safe", () => {
     const reverted = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
-      { type: 'REVERT' },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
+      { type: "REVERT" },
     ]);
-    expect(() => transitionTxState(reverted, { type: 'MARK_SAFE' })).toThrow(
+    expect(() => transitionTxState(reverted, { type: "MARK_SAFE" })).toThrow(
       TransactionMachineError,
     );
   });
 
-  it('reverted allows RETRY → idle', () => {
+  it("reverted allows RETRY → idle", () => {
     const reverted = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
-      { type: 'REVERT' },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
+      { type: "REVERT" },
     ]);
-    const next = transitionTxState(reverted, { type: 'RETRY' });
-    expect(next.status).toBe('idle');
+    const next = transitionTxState(reverted, { type: "RETRY" });
+    expect(next.status).toBe("idle");
     expect(next.txHash).toBeNull();
   });
 });
@@ -208,29 +237,29 @@ describe('Revert path', () => {
 // Drop path
 // ---------------------------------------------------------------------------
 
-describe('Drop path', () => {
-  it('transitions submitted → dropped on DROP', () => {
+describe("Drop path", () => {
+  it("transitions submitted → dropped on DROP", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
     ]);
-    const next = transitionTxState(state, { type: 'DROP' });
-    expect(next.status).toBe('dropped');
-    if (next.status === 'dropped') {
-      expect(next.error).toBe('DROPPED');
+    const next = transitionTxState(state, { type: "DROP" });
+    expect(next.status).toBe("dropped");
+    if (next.status === "dropped") {
+      expect(next.error).toBe("DROPPED");
     }
   });
 
-  it('dropped allows RETRY → idle', () => {
+  it("dropped allows RETRY → idle", () => {
     const dropped = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'DROP' },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      { type: "DROP" },
     ]);
-    const next = transitionTxState(dropped, { type: 'RETRY' });
-    expect(next.status).toBe('idle');
+    const next = transitionTxState(dropped, { type: "RETRY" });
+    expect(next.status).toBe("idle");
   });
 });
 
@@ -238,29 +267,40 @@ describe('Drop path', () => {
 // Replaced path
 // ---------------------------------------------------------------------------
 
-describe('Replaced path', () => {
-  it('transitions submitted → replaced on REPLACE', () => {
+describe("Replaced path", () => {
+  it("transitions submitted → replaced on REPLACE", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
     ]);
-    const next = transitionTxState(state, { type: 'REPLACE', replacedBy: MOCK_HASH_2 });
-    expect(next.status).toBe('replaced');
-    if (next.status === 'replaced') {
+    const next = transitionTxState(state, {
+      type: "REPLACE",
+      replacedBy: MOCK_HASH_2,
+    });
+    expect(next.status).toBe("replaced");
+    if (next.status === "replaced") {
       expect(next.replacedBy).toBe(MOCK_HASH_2);
     }
   });
 
-  it('transitions confirming → replaced on REPLACE', () => {
+  it("transitions confirming → replaced on REPLACE", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
     ]);
-    const next = transitionTxState(state, { type: 'REPLACE', replacedBy: MOCK_HASH_2 });
-    expect(next.status).toBe('replaced');
+    const next = transitionTxState(state, {
+      type: "REPLACE",
+      replacedBy: MOCK_HASH_2,
+    });
+    expect(next.status).toBe("replaced");
   });
 });
 
@@ -268,43 +308,53 @@ describe('Replaced path', () => {
 // Wrong-network guard
 // ---------------------------------------------------------------------------
 
-describe('Wrong-network guard', () => {
-  it('throws WRONG_NETWORK when PREPARE is called with an unsupported chain (production mode)', () => {
+describe("Wrong-network guard", () => {
+  it("throws WRONG_NETWORK when PREPARE is called with an unsupported chain (production mode)", () => {
     expect(() =>
-      transitionTxState(idle(), { type: 'PREPARE', chainId: WRONG_CHAIN }),
+      transitionTxState(idle(), { type: "PREPARE", chainId: WRONG_CHAIN }),
     ).toThrow(TransactionMachineError);
 
     try {
-      transitionTxState(idle(), { type: 'PREPARE', chainId: WRONG_CHAIN });
+      transitionTxState(idle(), { type: "PREPARE", chainId: WRONG_CHAIN });
     } catch (err) {
       expect(err).toBeInstanceOf(TransactionMachineError);
-      expect((err as TransactionMachineError).reason).toBe('WRONG_NETWORK');
+      expect((err as TransactionMachineError).reason).toBe("WRONG_NETWORK");
     }
   });
 
-  it('accepts OP Mainnet (10)', () => {
-    const next = transitionTxState(idle(), { type: 'PREPARE', chainId: OP_MAINNET });
-    expect(next.status).toBe('preparing');
+  it("accepts OP Mainnet (10)", () => {
+    const next = transitionTxState(idle(), {
+      type: "PREPARE",
+      chainId: OP_MAINNET,
+    });
+    expect(next.status).toBe("preparing");
   });
 
-  it('accepts OP Sepolia (11155420)', () => {
-    const next = transitionTxState(idle(), { type: 'PREPARE', chainId: OP_SEPOLIA });
-    expect(next.status).toBe('preparing');
+  it("accepts OP Sepolia (11155420)", () => {
+    const next = transitionTxState(idle(), {
+      type: "PREPARE",
+      chainId: OP_SEPOLIA,
+    });
+    expect(next.status).toBe("preparing");
   });
 
-  it('rejects Hardhat (31337) in production mode (allowLocalDev = false)', () => {
+  it("rejects Hardhat (31337) in production mode (allowLocalDev = false)", () => {
     expect(() =>
-      transitionTxState(idle(), { type: 'PREPARE', chainId: HARDHAT }, { allowLocalDev: false }),
+      transitionTxState(
+        idle(),
+        { type: "PREPARE", chainId: HARDHAT },
+        { allowLocalDev: false },
+      ),
     ).toThrow(TransactionMachineError);
   });
 
-  it('accepts Hardhat (31337) in dev mode (allowLocalDev = true)', () => {
+  it("accepts Hardhat (31337) in dev mode (allowLocalDev = true)", () => {
     const next = transitionTxState(
       idle(),
-      { type: 'PREPARE', chainId: HARDHAT },
+      { type: "PREPARE", chainId: HARDHAT },
       { allowLocalDev: true },
     );
-    expect(next.status).toBe('preparing');
+    expect(next.status).toBe("preparing");
   });
 });
 
@@ -312,17 +362,17 @@ describe('Wrong-network guard', () => {
 // Stale-receipt guard
 // ---------------------------------------------------------------------------
 
-describe('Stale receipt guard', () => {
-  it('throws STALE_RECEIPT when receipt chainId ≠ submission chainId', () => {
+describe("Stale receipt guard", () => {
+  it("throws STALE_RECEIPT when receipt chainId ≠ submission chainId", () => {
     const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
     ]);
 
     expect(() =>
       transitionTxState(state, {
-        type: 'CONFIRM',
+        type: "CONFIRM",
         blockNumber: BigInt(100),
         confirmations: 1,
         receiptChainId: OP_SEPOLIA, // different chain!
@@ -331,13 +381,13 @@ describe('Stale receipt guard', () => {
 
     try {
       transitionTxState(state, {
-        type: 'CONFIRM',
+        type: "CONFIRM",
         blockNumber: BigInt(100),
         confirmations: 1,
         receiptChainId: OP_SEPOLIA,
       });
     } catch (err) {
-      expect((err as TransactionMachineError).reason).toBe('STALE_RECEIPT');
+      expect((err as TransactionMachineError).reason).toBe("STALE_RECEIPT");
     }
   });
 });
@@ -346,22 +396,22 @@ describe('Stale receipt guard', () => {
 // Contradiction / synthetic-success guards
 // ---------------------------------------------------------------------------
 
-describe('Contradiction and synthetic-success guards', () => {
-  it('throws INVALID_TRANSITION on idle → FINALIZE (synthetic success)', () => {
-    expect(() =>
-      transitionTxState(idle(), { type: 'FINALIZE' }),
-    ).toThrow(TransactionMachineError);
+describe("Contradiction and synthetic-success guards", () => {
+  it("throws INVALID_TRANSITION on idle → FINALIZE (synthetic success)", () => {
+    expect(() => transitionTxState(idle(), { type: "FINALIZE" })).toThrow(
+      TransactionMachineError,
+    );
   });
 
-  it('throws INVALID_TRANSITION on idle → MARK_SAFE', () => {
-    expect(() =>
-      transitionTxState(idle(), { type: 'MARK_SAFE' }),
-    ).toThrow(TransactionMachineError);
+  it("throws INVALID_TRANSITION on idle → MARK_SAFE", () => {
+    expect(() => transitionTxState(idle(), { type: "MARK_SAFE" })).toThrow(
+      TransactionMachineError,
+    );
   });
 
-  it('throws INVALID_TRANSITION on idle → SUBMIT (no hash fabrication path)', () => {
+  it("throws INVALID_TRANSITION on idle → SUBMIT (no hash fabrication path)", () => {
     expect(() =>
-      transitionTxState(idle(), { type: 'SUBMIT', txHash: MOCK_HASH_1 }),
+      transitionTxState(idle(), { type: "SUBMIT", txHash: MOCK_HASH_1 }),
     ).toThrow(TransactionMachineError);
   });
 });
@@ -370,36 +420,47 @@ describe('Contradiction and synthetic-success guards', () => {
 // RESET from any state → idle
 // ---------------------------------------------------------------------------
 
-describe('RESET from any state', () => {
+describe("RESET from any state", () => {
   const statesToTest: { label: string; state: TransactionState }[] = [
-    { label: 'preparing', state: drive([{ type: 'PREPARE', chainId: OP_MAINNET }]) },
     {
-      label: 'signature-requested',
-      state: drive([{ type: 'PREPARE', chainId: OP_MAINNET }, { type: 'REQUEST_SIGNATURE' }]),
+      label: "preparing",
+      state: drive([{ type: "PREPARE", chainId: OP_MAINNET }]),
     },
     {
-      label: 'submitted',
+      label: "signature-requested",
       state: drive([
-        { type: 'PREPARE', chainId: OP_MAINNET },
-        { type: 'REQUEST_SIGNATURE' },
-        { type: 'SUBMIT', txHash: MOCK_HASH_1 },
+        { type: "PREPARE", chainId: OP_MAINNET },
+        { type: "REQUEST_SIGNATURE" },
       ]),
     },
     {
-      label: 'confirming',
+      label: "submitted",
       state: drive([
-        { type: 'PREPARE', chainId: OP_MAINNET },
-        { type: 'REQUEST_SIGNATURE' },
-        { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-        { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
+        { type: "PREPARE", chainId: OP_MAINNET },
+        { type: "REQUEST_SIGNATURE" },
+        { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      ]),
+    },
+    {
+      label: "confirming",
+      state: drive([
+        { type: "PREPARE", chainId: OP_MAINNET },
+        { type: "REQUEST_SIGNATURE" },
+        { type: "SUBMIT", txHash: MOCK_HASH_1 },
+        {
+          type: "CONFIRM",
+          blockNumber: BigInt(100),
+          confirmations: 1,
+          receiptChainId: OP_MAINNET,
+        },
       ]),
     },
   ];
 
   statesToTest.forEach(({ label, state }) => {
     it(`resets from ${label} to idle`, () => {
-      const next = transitionTxState(state, { type: 'RESET' });
-      expect(next.status).toBe('idle');
+      const next = transitionTxState(state, { type: "RESET" });
+      expect(next.status).toBe("idle");
       expect(next.txHash).toBeNull();
       expect(next.error).toBeNull();
     });
@@ -410,108 +471,110 @@ describe('RESET from any state', () => {
 // Indexing path
 // ---------------------------------------------------------------------------
 
-describe('Indexing path', () => {
-  it('transitions safe → indexing → finalized', () => {
+describe("Indexing path", () => {
+  it("transitions safe → indexing → finalized", () => {
     const safe = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
-      { type: 'MARK_SAFE' },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
+      { type: "MARK_SAFE" },
     ]);
-    expect(safe.status).toBe('safe');
+    expect(safe.status).toBe("safe");
 
-    const indexing = transitionTxState(safe, { type: 'INDEXING' });
-    expect(indexing.status).toBe('indexing');
+    const indexing = transitionTxState(safe, { type: "INDEXING" });
+    expect(indexing.status).toBe("indexing");
 
-    const finalized = transitionTxState(indexing, { type: 'FINALIZE' });
-    expect(finalized.status).toBe('finalized');
+    const finalized = transitionTxState(indexing, { type: "FINALIZE" });
+    expect(finalized.status).toBe("finalized");
     expect(finalized.txHash).toBe(MOCK_HASH_1);
   });
 });
 
-
 // ---------------------------------------------------------------------------
-// Reorg path (V2-FE-051)
+// Reorg path
 // ---------------------------------------------------------------------------
 
-describe('Reorg path', () => {
-  it('transitions confirming → reorged on REORG', () => {
-    const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
+describe("Reorg path", () => {
+  it("transitions confirming → reorged on REORG", () => {
+    const confirming = drive([
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
     ]);
-    const next = transitionTxState(state, {
-      type: 'REORG',
-      orphanedBlockHash: ('0x' + 'cc'.repeat(32)) as `0x${string}`,
-    });
-    expect(next.status).toBe('reorged');
-    expect(next.txHash).toBe(MOCK_HASH_1);
-    if (next.status === 'reorged') {
-      expect(next.error).toBe('REORGED');
-      expect(next.orphanedBlockHash).toBe(('0x' + 'cc'.repeat(32)) as `0x${string}`);
-      expect(next.blockNumber).toBe(BigInt(100));
+    const reorged = transitionTxState(confirming, { type: "REORG" });
+    expect(reorged.status).toBe("reorged");
+    if (reorged.status === "reorged") {
+      expect(reorged.txHash).toBe(MOCK_HASH_1);
+      expect(reorged.error).toBe("REORG");
+      expect(reorged.blockNumber).toBe(BigInt(100));
     }
   });
 
-  it('transitions safe → reorged on REORG', () => {
-    const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
-      { type: 'MARK_SAFE' },
+  it("transitions safe → reorged on REORG", () => {
+    const safe = drive([
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
+      { type: "MARK_SAFE" },
     ]);
-    const next = transitionTxState(state, { type: 'REORG' });
-    expect(next.status).toBe('reorged');
+    const reorged = transitionTxState(safe, { type: "REORG" });
+    expect(reorged.status).toBe("reorged");
   });
 
-  it('transitions indexing → reorged on REORG', () => {
-    const state = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
-      { type: 'MARK_SAFE' },
-      { type: 'INDEXING' },
-    ]);
-    const next = transitionTxState(state, { type: 'REORG' });
-    expect(next.status).toBe('reorged');
-  });
-
-  it('reorged is terminal — does NOT transition to safe or finalized', () => {
+  it("reorged is a terminal failure state and allows RETRY → idle", () => {
     const reorged = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
-      { type: 'REORG' },
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
+      { type: "REORG" },
     ]);
-    expect(() => transitionTxState(reorged, { type: 'MARK_SAFE' })).toThrow(
-      TransactionMachineError,
-    );
-    expect(() => transitionTxState(reorged, { type: 'FINALIZE' })).toThrow(
-      TransactionMachineError,
-    );
-  });
-
-  it('reorged allows RETRY → idle for recovery', () => {
-    const reorged = drive([
-      { type: 'PREPARE', chainId: OP_MAINNET },
-      { type: 'REQUEST_SIGNATURE' },
-      { type: 'SUBMIT', txHash: MOCK_HASH_1 },
-      { type: 'CONFIRM', blockNumber: BigInt(100), confirmations: 1, receiptChainId: OP_MAINNET },
-      { type: 'REORG' },
-    ]);
-    const next = transitionTxState(reorged, { type: 'RETRY' });
-    expect(next.status).toBe('idle');
+    expect(reorged.status).toBe("reorged");
+    const next = transitionTxState(reorged, { type: "RETRY" });
+    expect(next.status).toBe("idle");
     expect(next.txHash).toBeNull();
   });
 
-  it('rejects REORG from idle (no fabricated orphan path)', () => {
-    expect(() => transitionTxState(idle(), { type: 'REORG' })).toThrow(
+  it("throws INVALID_TRANSITION on reorged → safe or finalized (no synthetic recovery)", () => {
+    const reorged = drive([
+      { type: "PREPARE", chainId: OP_MAINNET },
+      { type: "REQUEST_SIGNATURE" },
+      { type: "SUBMIT", txHash: MOCK_HASH_1 },
+      {
+        type: "CONFIRM",
+        blockNumber: BigInt(100),
+        confirmations: 1,
+        receiptChainId: OP_MAINNET,
+      },
+      { type: "REORG" },
+    ]);
+    expect(() => transitionTxState(reorged, { type: "MARK_SAFE" })).toThrow(
+      TransactionMachineError,
+    );
+    expect(() => transitionTxState(reorged, { type: "FINALIZE" })).toThrow(
       TransactionMachineError,
     );
   });

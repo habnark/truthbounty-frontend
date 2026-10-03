@@ -659,8 +659,8 @@ describe('Degraded-state UX accessibility battery', () => {
     assertReducedMotionDisablesAnimation(rmContainer, ['animate-spin', 'animate-pulse', 'motion-safe']);
   });
 
-  // ── 11. ConfigurationError / chain unsupported ───────────────────────────
-  it('State 11: ConfigurationError — chain unsupported (FallbackBoundary blocked with chainId=1 reason)', async () => {
+  // ── 11. ConfigurationError / unsupported-chain ───────────────────────────
+  it('State 11: ConfigurationError — unsupported-chain (FallbackBoundary blocked with chainId=1 reason)', async () => {
     const reason =
       'Chain 1 (Ethereum Mainnet) is not supported. Please switch to Optimism or Optimism Sepolia.';
     const { container } = render(

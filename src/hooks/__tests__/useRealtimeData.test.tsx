@@ -36,9 +36,9 @@ describe('useRealtimeData - memory leak fix', () => {
     const { useRealtimeData } = await import('../../hooks/useRealtimeData');
     const { unmount } = renderHook(() => useRealtimeData(), { wrapper });
 
-    expect(mockSubscribe).toHaveBeenCalledTimes(7);
+    expect(mockSubscribe).toHaveBeenCalledTimes(8);
     unmount();
-    expect(mockUnsubscribe).toHaveBeenCalledTimes(7);
+    expect(mockUnsubscribe).toHaveBeenCalledTimes(8);
   });
 
   it('useRealtimeLeaderboard calls unsubscribe on unmount', async () => {

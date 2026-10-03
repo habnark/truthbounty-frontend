@@ -1,46 +1,30 @@
-'use client';
-
 /**
- * useReputation — hook for reputation state and tier calculation.
+ * useReputation
+ *
+ * Query-backed hook for on-chain reputation scores.
+ *
+ * Replaces the previous local-state-only implementation that allowed
+ * arbitrary client-side score mutations. Reputation is now read from
+ * the indexer API and updated only via projection-stream events.
  */
 
-import { useCallback, useState } from 'react';
-import {
-  getReputationTier,
-  getNextTier,
-  type ReputationTier,
-} from '@/lib/reputation';
+'use client';
 
-export interface ReputationState {
-  score: number;
-  tier: ReputationTier;
-  nextTier: ReturnType<typeof getNextTier>;
-  addPositive: () => void;
-  addNegative: () => void;
-  setScore: (score: number | ((prev: number) => number)) => void;
+import type { UserReputation } from '@/app/api/user.api';
+import { useReputationByUser } from '@/app/queries/reputation.queries';
+
+export interface UseReputationReturn {
+  reputation: UserReputation | undefined;
+  isLoading: boolean;
+  isError: boolean;
 }
 
-export function useReputation(
-  _userId?: string,
-  initialScore = 0,
-): ReputationState {
-  void _userId;
-  const [score, setScore] = useState(initialScore);
-
-  const addPositive = useCallback(() => {
-    setScore((current) => current + 1);
-  }, []);
-
-  const addNegative = useCallback(() => {
-    setScore((current) => Math.max(0, current - 1));
-  }, []);
+export function useReputation(userId: string): UseReputationReturn {
+  const { data: reputation, isLoading, isError } = useReputationByUser(userId);
 
   return {
-    score,
-    tier: getReputationTier(score),
-    nextTier: getNextTier(score),
-    addPositive,
-    addNegative,
-    setScore,
+    reputation,
+    isLoading,
+    isError,
   };
 }

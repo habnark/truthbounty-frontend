@@ -24,6 +24,14 @@ const customJestConfig = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '<rootDir>/e2e/',
+    '<rootDir>/.kilo/',
+    '<rootDir>/.freebuff/',
+    '<rootDir>/.trae/',
+  ],
+  modulePathIgnorePatterns: [
+    '<rootDir>/.kilo/',
+    '<rootDir>/.freebuff/',
+    '<rootDir>/.trae/',
   ],
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',

@@ -9,6 +9,9 @@ import { useSubmitClaim } from "@/app/queries/claims.queries";
 import { useWriteContract, useReadContract, usePublicClient, useChainId } from "wagmi";
 import { keccak256, stringToHex, parseAbi } from "viem";
 import { useWriteReadiness } from "@/hooks/useWriteReadiness";
+import { EvidenceUploader } from "@/features/evidence-upload/EvidenceUploader";
+import { buildContentDigest, buildEvidenceSubmission } from "@/features/evidence-upload/evidence-commitment";
+import type { EvidenceCommitment } from "@/features/evidence-upload/types";
 
 const claimAbi = parseAbi([
   "function createClaim(bytes32 contentDigest, address bountyAsset, uint256 amount, bytes32 configHash) returns (uint256 claimId)",
@@ -153,6 +156,7 @@ const ClaimSubmissionForm: React.FC<ClaimFormProps> = ({ onSubmit, onClose }) =>
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<{ [key: string]: boolean }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [evidenceCommitment, setEvidenceCommitment] = useState<EvidenceCommitment | null>(null);
 
   const trust = useTrust();
   const account = useAccount();
@@ -253,9 +257,10 @@ const ClaimSubmissionForm: React.FC<ClaimFormProps> = ({ onSubmit, onClose }) =>
 
     try {
       if (process.env.NEXT_PUBLIC_BOUNTY_CLAIM_ADDRESS) {
-        const contentDigest = keccak256(
-          stringToHex(`${title}|${category}|${impact}|${source}|${description}`)
-        );
+        const contentDigest = buildContentDigest({
+          title, category, impact, source, description,
+          evidenceDigest: evidenceCommitment?.digest ?? null,
+        });
         await submitClaim(contentDigest);
       }
 
@@ -266,6 +271,7 @@ const ClaimSubmissionForm: React.FC<ClaimFormProps> = ({ onSubmit, onClose }) =>
           impact,
           source,
           description,
+          evidence: buildEvidenceSubmission(evidenceCommitment),
         });
       }
 

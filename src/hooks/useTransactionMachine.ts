@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
 /**
- * V2-FE-051 — Shared Transaction State Machine
+ * V2-FE-009 — Shared Transaction State Machine
  * useTransactionMachine — React hook wrapping the pure reducer.
  *
  * Features:
@@ -9,26 +9,26 @@
  *  - Syncs to localStorage on every active state change
  *  - Clears persisted state when idle or after terminal success (finalized)
  *  - Typed `send(event)` validates the transition before applying
- *  - Safe retry: RETRY from reverted/dropped/reorged → idle
- *  - Callbacks: onFinalized, onReverted, onDropped, onReorged fired exactly once per lifecycle
+ *  - Safe retry: RETRY from reverted/dropped → idle
+ *  - Callbacks: onFinalized, onReverted, onDropped fired exactly once per lifecycle
  */
 
-import { useReducer, useEffect, useRef, useCallback } from 'react';
+import { useReducer, useEffect, useRef, useCallback } from "react";
 import {
   type TransactionState,
   type TransactionEvent,
   type TransactionContext,
   TransactionMachineError,
   createIdleState,
-} from '@/lib/transaction-machine/transaction-machine.types';
-import { transitionTxState } from '@/lib/transaction-machine/transaction-machine';
+} from "@/lib/transaction-machine/transaction-machine.types";
+import { transitionTxState } from "@/lib/transaction-machine/transaction-machine";
 import {
   persistTxState,
   hydrateTxState,
   clearTxState,
   createTxContext,
   updateTxContext,
-} from '@/lib/transaction-machine/transaction-persistence';
+} from "@/lib/transaction-machine/transaction-persistence";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,7 +47,7 @@ export interface UseTransactionMachineOptions {
   onReverted?: (txHash: `0x${string}`) => void;
   /** Called once when the transaction is `dropped`. */
   onDropped?: () => void;
-  /** Called once when a previously observed receipt is orphaned (`reorged`). */
+  /** Called once when a confirmed/safe transaction is reorged out. */
   onReorged?: (txHash: `0x${string}`) => void;
 }
 
@@ -74,12 +74,12 @@ interface ReducerState {
 }
 
 type ReducerAction =
-  | { type: 'TRANSITION'; event: TransactionEvent; allowLocalDev: boolean }
-  | { type: 'RESET'; id: string; label: string };
+  | { type: "TRANSITION"; event: TransactionEvent; allowLocalDev: boolean }
+  | { type: "RESET"; id: string; label: string };
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
   switch (action.type) {
-    case 'TRANSITION': {
+    case "TRANSITION": {
       try {
         const nextTxState = transitionTxState(
           state.context.state,
@@ -94,11 +94,11 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         const machineErr =
           err instanceof TransactionMachineError
             ? err
-            : new TransactionMachineError('INVALID_TRANSITION', String(err));
+            : new TransactionMachineError("INVALID_TRANSITION", String(err));
         return { ...state, lastError: machineErr };
       }
     }
-    case 'RESET': {
+    case "RESET": {
       const freshCtx = createTxContext(action.id, action.label);
       return { context: freshCtx, lastError: null };
     }
@@ -116,7 +116,11 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
 export function useTransactionMachine(
   opts: UseTransactionMachineOptions = {},
 ): UseTransactionMachineReturn {
-  const { id = 'tx-default', label = 'Transaction', allowLocalDev = false } = opts;
+  const {
+    id = "tx-default",
+    label = "Transaction",
+    allowLocalDev = false,
+  } = opts;
 
   // Refs for callbacks — stable references, no need to restart effects
   const onFinalizedRef = useRef(opts.onFinalized);
@@ -149,7 +153,7 @@ export function useTransactionMachine(
 
   // Sync to localStorage whenever state changes (clearing when idle)
   useEffect(() => {
-    if (txState.status === 'idle') {
+    if (txState.status === "idle") {
       clearTxState(id);
     } else {
       persistTxState(context);
@@ -159,22 +163,22 @@ export function useTransactionMachine(
   // Fire terminal callbacks (each fires at most once per lifecycle)
   useEffect(() => {
     const status = txState.status;
-    const callbackKey = `${status}:${txState.txHash ?? 'no-hash'}`;
+    const callbackKey = `${status}:${txState.txHash ?? "no-hash"}`;
 
     if (callbackFiredRef.current.has(callbackKey)) return;
 
-    if (status === 'finalized' && txState.txHash) {
+    if (status === "finalized" && txState.txHash) {
       callbackFiredRef.current.add(callbackKey);
       onFinalizedRef.current?.(txState.txHash);
       // Clear persisted state after finalization
       clearTxState(id);
-    } else if (status === 'reverted' && txState.txHash) {
+    } else if (status === "reverted" && txState.txHash) {
       callbackFiredRef.current.add(callbackKey);
       onRevertedRef.current?.(txState.txHash);
-    } else if (status === 'dropped') {
+    } else if (status === "dropped") {
       callbackFiredRef.current.add(callbackKey);
       onDroppedRef.current?.();
-    } else if (status === 'reorged' && txState.txHash) {
+    } else if (status === "reorged" && txState.txHash) {
       callbackFiredRef.current.add(callbackKey);
       onReorgedRef.current?.(txState.txHash);
     }
@@ -182,7 +186,7 @@ export function useTransactionMachine(
 
   const send = useCallback(
     (event: TransactionEvent) => {
-      dispatch({ type: 'TRANSITION', event, allowLocalDev });
+      dispatch({ type: "TRANSITION", event, allowLocalDev });
     },
     [allowLocalDev],
   );
@@ -190,7 +194,7 @@ export function useTransactionMachine(
   const reset = useCallback(() => {
     clearTxState(id);
     callbackFiredRef.current.clear();
-    dispatch({ type: 'RESET', id, label });
+    dispatch({ type: "RESET", id, label });
   }, [id, label]);
 
   return {
@@ -211,4 +215,7 @@ export type {
   TransactionContext,
   TransactionMachineError,
 };
-export { isTerminalSuccess, isTerminalFailure } from '@/lib/transaction-machine/transaction-machine.types';
+export {
+  isTerminalSuccess,
+  isTerminalFailure,
+} from "@/lib/transaction-machine/transaction-machine.types";

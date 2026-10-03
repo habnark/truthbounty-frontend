@@ -1,4 +1,15 @@
 // src/hooks/useRealtimeData.ts
+//
+// Projection-aware cache invalidation driven by WebSocket stream events.
+//
+// Design rules:
+//  1. Always use canonical query key factories — never raw string arrays.
+//  2. Prefer setQueryData for events that carry the full new payload
+//     (avoids an unnecessary round-trip fetch).
+//  3. Use invalidateQueries only when the event does NOT carry the full
+//     payload or when we need to bust a list that is otherwise hard to
+//     update surgically.
+//  4. Never fabricate hashes, amounts, or verdicts from event metadata.
 
 'use client';
 
@@ -14,35 +25,40 @@ import type {
   DisputeCreatedEvent,
   DisputeResolvedEvent,
   LeaderboardUpdatedEvent,
+  UserStatsUpdatedEvent,
 } from '@/app/types/websocket';
 import { sortAndNormalizeLeaderboard } from '@/lib/leaderboard';
 
 /**
- * Hook that integrates WebSocket events with TanStack Query cache
- * Automatically invalidates and updates queries when real-time events are received
+ * Hook that integrates WebSocket projection-stream events with TanStack Query
+ * cache.  Each handler targets the narrowest possible key set so that
+ * unrelated data is never evicted.
  */
 export function useRealtimeData() {
   const { subscribe, isConnected } = useWebSocketContext();
   const queryClient = useQueryClient();
 
-  // Handle claim created events
+  // ------------------------------------------------------------------
+  // CLAIM_CREATED — prepend to the unfiltered claims list; no full refetch.
+  // ------------------------------------------------------------------
   const handleClaimCreated = useCallback(
     (payload: ClaimCreatedEvent) => {
-      // Add new claim to cache or invalidate list
-      queryClient.setQueryData(queryKeys.claims.all, (old: unknown) => {
+      queryClient.setQueryData(queryKeys.claims.lists(), (old: unknown) => {
         if (Array.isArray(old)) {
           return [payload.claim, ...old];
         }
         return [payload.claim];
       });
     },
-    [queryClient]
+    [queryClient],
   );
 
-  // Handle claim updated events
+  // ------------------------------------------------------------------
+  // CLAIM_UPDATED — surgical update on both detail and list caches.
+  // ------------------------------------------------------------------
   const handleClaimUpdated = useCallback(
     (payload: ClaimUpdatedEvent) => {
-      // Update the specific claim in cache
+      // Update detail entry.
       queryClient.setQueryData(
         queryKeys.claims.detail(payload.claimId),
         (old: unknown) => {
@@ -50,28 +66,30 @@ export function useRealtimeData() {
             return { ...old, ...payload.updates };
           }
           return old;
-        }
+        },
       );
 
-      // Also update in the list
-      queryClient.setQueryData(queryKeys.claims.all, (old: unknown) => {
+      // Patch the claim inside the list without refetching the whole list.
+      queryClient.setQueryData(queryKeys.claims.lists(), (old: unknown) => {
         if (Array.isArray(old)) {
           return (old as Array<{ id: string } & Record<string, unknown>>).map((claim) =>
             claim.id === payload.claimId
               ? { ...claim, ...payload.updates }
-              : claim
+              : claim,
           );
         }
         return old;
       });
     },
-    [queryClient]
+    [queryClient],
   );
 
-  // Handle claim status changed events
+  // ------------------------------------------------------------------
+  // CLAIM_STATUS_CHANGED — update status field + invalidate finality
+  // projection so it is re-evaluated on next read.
+  // ------------------------------------------------------------------
   const handleClaimStatusChanged = useCallback(
     (payload: ClaimStatusChangedEvent) => {
-      // Update the specific claim with new status
       queryClient.setQueryData(
         queryKeys.claims.detail(payload.claimId),
         (old: unknown) => {
@@ -79,86 +97,160 @@ export function useRealtimeData() {
             return {
               ...old,
               status: payload.newStatus,
-              updatedAt: payload.claim?.updatedAt || new Date().toISOString(),
+              updatedAt:
+                (payload.claim as { updatedAt?: string } | undefined)?.updatedAt ??
+                new Date().toISOString(),
             };
           }
           return old;
-        }
+        },
       );
 
-      // Update in the list
-      queryClient.setQueryData(queryKeys.claims.all, (old: unknown) => {
+      queryClient.setQueryData(queryKeys.claims.lists(), (old: unknown) => {
         if (Array.isArray(old)) {
           return (old as Array<{ id: string } & Record<string, unknown>>).map((claim) =>
             claim.id === payload.claimId
               ? { ...claim, status: payload.newStatus }
-              : claim
+              : claim,
           );
         }
         return old;
       });
 
-      // Invalidate related queries to refetch
-      queryClient.invalidateQueries({ queryKey: queryKeys.claims.detail(payload.claimId) });
+      // Invalidate claim detail to get fresh status
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.claims.detail(payload.claimId),
+      });
+
+      // Bust the finality projection cache for this claim so any
+      // displayed finality badge re-derives from fresh on-chain data.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.claims.finality(payload.claimId),
+      });
+
+      // Bust status-filtered lists that may now be stale.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.claims.byStatus(payload.newStatus),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.claims.byStatus(payload.previousStatus),
+      });
     },
-    [queryClient]
+    [queryClient],
   );
 
-  // Handle verification added events
+  // ------------------------------------------------------------------
+  // VERIFICATION_ADDED — invalidate the claim detail (verifier count
+  // changed) + the user's verification history.
+  // ------------------------------------------------------------------
   const handleVerificationAdded = useCallback(
     (payload: VerificationAddedEvent) => {
-      // Invalidate claim detail to get updated verifications
       queryClient.invalidateQueries({
         queryKey: queryKeys.claims.detail(payload.claimId),
       });
 
-      // Invalidate user verification queries
+      // Invalidate the verification list for this claim.
       queryClient.invalidateQueries({
-        queryKey: queryKeys.user.profile(payload.verification.verifierAddress),
+        queryKey: queryKeys.verifications.byClaim(payload.claimId),
       });
+
+      // Invalidate the verifier's user profile.
+      if (payload.verification.verifierAddress) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.user.profile(payload.verification.verifierAddress),
+        });
+      }
+
+      // Invalidate the verifier's own reputation projection.
+      const verifierAddress = payload.verification.verifierAddress;
+      if (verifierAddress) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.reputation.byUser(verifierAddress),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.user.reputation(verifierAddress),
+        });
+      }
     },
-    [queryClient]
+    [queryClient],
   );
 
-  // Handle dispute created events
+  // ------------------------------------------------------------------
+  // DISPUTE_CREATED — invalidate claim detail + disputes namespace.
+  // ------------------------------------------------------------------
   const handleDisputeCreated = useCallback(
     (payload: DisputeCreatedEvent) => {
-      // Invalidate claim detail to show dispute status
       queryClient.invalidateQueries({
         queryKey: queryKeys.claims.detail(payload.claimId),
       });
+
+      // Invalidate the disputes for this claim (not all disputes).
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.disputes.byClaim(payload.claimId),
+      });
     },
-    [queryClient]
+    [queryClient],
   );
 
-  // Handle dispute resolved events
+  // ------------------------------------------------------------------
+  // DISPUTE_RESOLVED — invalidate claim detail + the specific dispute +
+  // rewards (outcome may have changed claimable amounts).
+  // ------------------------------------------------------------------
   const handleDisputeResolved = useCallback(
     (payload: DisputeResolvedEvent) => {
-      // Invalidate claim detail to get final status
       queryClient.invalidateQueries({
         queryKey: queryKeys.claims.detail(payload.claimId),
       });
 
-      // Invalidate dispute queries
-      queryClient.invalidateQueries({ queryKey: queryKeys.disputes.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.disputes.detail(payload.disputeId),
+      });
+
+      // Dispute finality projection is now stale.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.disputes.finality(payload.disputeId),
+      });
+
+      // Reward projections may have changed due to outcome.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.rewards.all,
+      });
     },
-    [queryClient]
+    [queryClient],
   );
 
-  // Handle leaderboard updated events
+  // ------------------------------------------------------------------
+  // LEADERBOARD_UPDATED — write-through; no refetch needed.
+  // ------------------------------------------------------------------
   const handleLeaderboardUpdated = useCallback(
     (payload: LeaderboardUpdatedEvent) => {
-      // Normalize real-time rankings (sort by server rank + dense ranks)
-      // before writing to the cache so protocol invariants always hold.
       queryClient.setQueryData(
         queryKeys.leaderboard,
-        sortAndNormalizeLeaderboard(payload.rankings)
+        sortAndNormalizeLeaderboard(payload.rankings),
       );
     },
-    [queryClient]
+    [queryClient],
   );
 
-  // Subscribe to all WebSocket events when connected
+  // ------------------------------------------------------------------
+  // USER_STATS_UPDATED — targeted reputation + user profile busts.
+  // ------------------------------------------------------------------
+  const handleUserStatsUpdated = useCallback(
+    (payload: UserStatsUpdatedEvent) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.reputation.byUser(payload.userId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.user.reputation(payload.userId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.user.profile(payload.userId),
+      });
+    },
+    [queryClient],
+  );
+
+  // Subscribe / unsubscribe whenever the connection state changes.
   useEffect(() => {
     if (!isConnected) return;
 
@@ -170,11 +262,11 @@ export function useRealtimeData() {
       subscribe('DISPUTE_CREATED', handleDisputeCreated),
       subscribe('DISPUTE_RESOLVED', handleDisputeResolved),
       subscribe('LEADERBOARD_UPDATED', handleLeaderboardUpdated),
+      subscribe('USER_STATS_UPDATED', handleUserStatsUpdated),
     ];
 
-    // Cleanup subscriptions on unmount or when dependencies change
     return () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe?.());
+      unsubscribers.forEach((unsub) => unsub?.());
     };
   }, [
     isConnected,
@@ -186,12 +278,13 @@ export function useRealtimeData() {
     handleDisputeCreated,
     handleDisputeResolved,
     handleLeaderboardUpdated,
+    handleUserStatsUpdated,
   ]);
 }
 
-
 /**
- * Hook for subscribing to leaderboard updates in real-time
+ * Lightweight hook that only subscribes to leaderboard stream updates.
+ * Use this in components that only render the leaderboard.
  */
 export function useRealtimeLeaderboard() {
   const { subscribe, isConnected } = useWebSocketContext();
@@ -203,7 +296,7 @@ export function useRealtimeLeaderboard() {
     const unsubscribe = subscribe('LEADERBOARD_UPDATED', (payload) => {
       queryClient.setQueryData(
         queryKeys.leaderboard,
-        sortAndNormalizeLeaderboard(payload.rankings)
+        sortAndNormalizeLeaderboard(payload.rankings),
       );
     });
 

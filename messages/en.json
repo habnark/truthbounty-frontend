@@ -275,6 +275,8 @@
       "TRANSACTION_REVERTED": "Transaction reverted on-chain",
       "TX_NOT_FOUND": "Transaction not found on network",
       "ALLOWANCE_INSUFFICIENT": "Insufficient token allowance",
+      "INSUFFICIENT_BALANCE": "Insufficient token balance to fund this claim",
+      "SUBMISSION_IN_PROGRESS": "A claim submission is already in progress",
       "APPROVAL_FAILED": "Token approval failed: {reason}",
       "CLAIM_NOT_INDEXED": "Claim transaction confirmed but indexed claim could not be reconciled",
       "UNEXPECTED_ERROR": "An unexpected error occurred",

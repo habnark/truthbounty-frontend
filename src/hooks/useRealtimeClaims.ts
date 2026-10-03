@@ -108,7 +108,7 @@ export function useRealtimeClaimsList() {
     const unsubscribe = subscribe('CLAIM_CREATED', () => {
       // New claim created - invalidate list
       queryClient.invalidateQueries({
-        queryKey: queryKeys.claims.all,
+        queryKey: queryKeys.claims.lists(),
       });
     });
 

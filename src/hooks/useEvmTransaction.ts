@@ -10,8 +10,8 @@
  *  - chainId validated against OPTIMISM_CHAIN_IDS before PREPARE
  *  - Wrong-network is detected and transitions to an explicit error state
  *  - Write readiness gate (V2-FE-100) runs before PREPARE; fail closed
- *  - Intent is invalidated when account or chain changes mid-flow
- *  - No non-EVM runtime dependencies
+ *  - Intent is invalidated when account or chain changes mid-flow (V2-FE-046)
+ *  - No Stellar/Freighter runtime dependencies
  *  - contract ABIs throw NotImplemented until V2-FE-003/005 are merged
  */
 
@@ -30,8 +30,8 @@ import {
   isValidChain,
 } from '@/lib/transaction-machine/transaction-machine.types';
 import {
-  assertWriteReady,
-  evaluateWriteTarget,
+  assertWalletWriteReady,
+  evaluateWalletWriteReadiness,
   mapGateFailureToMachineReason,
   resolveCanonicalTargetAddress,
 } from '@/lib/contracts/write-gate';
@@ -96,7 +96,7 @@ export interface UseEvmTransactionReturn {
   /** Connected wallet address, or undefined if disconnected. */
   address: `0x${string}` | undefined;
   /** Latest write-gate evaluation (fail closed before any sign). */
-  readiness: ReturnType<typeof evaluateWriteTarget>;
+  readiness: ReturnType<typeof evaluateWalletWriteReadiness>;
   /** True only when the write-gate reports ready. */
   isWriteReady: boolean;
 }
@@ -139,9 +139,10 @@ export function useEvmTransaction(
     allowLocalDev,
   });
 
-  // V2-FE-100: fail-closed write readiness (chain, account, address)
-  // Uses canonical release target for UI readiness; write paths re-check params.address.
-  const readiness = evaluateWriteTarget({
+  // V2-FE-100: fail-closed write readiness (chain, account, address).
+  // Uses canonical release target for UI readiness; write paths re-check
+  // params.address against the same gate before signing.
+  const readiness = evaluateWalletWriteReadiness({
     account: address ?? null,
     chainId,
     expectedChainId,
@@ -149,8 +150,10 @@ export function useEvmTransaction(
     allowLocalDev,
   });
 
-  // Intent invalidation: drop an in-flight intent if account/chain changes
-  // before a real hash exists (never fabricate continuity across wallets).
+  // V2-FE-046: intent invalidation. Drop an in-flight intent if account or
+  // chain changes before a real hash exists (never fabricate continuity
+  // across wallets). A submitted transaction keeps its canonical hash and
+  // receipt — only intents that never reached the chain are cleared.
   const intentRef = useRef<{
     address: string | undefined;
     chainId: number;
@@ -286,7 +289,7 @@ export function useEvmTransaction(
   const writeContract = useCallback(
     async (params: WriteContractParams): Promise<void> => {
       // V2-FE-100 readiness gate — fail closed before PREPARE
-      const gate = evaluateWriteTarget({
+      const gate = evaluateWalletWriteReadiness({
         account: address ?? null,
         chainId,
         expectedChainId,
@@ -302,7 +305,7 @@ export function useEvmTransaction(
       }
 
       // Extra invariant: assert (throws WriteGateError) for exhaustive codes
-      assertWriteReady({
+      assertWalletWriteReady({
         account: address ?? null,
         chainId,
         expectedChainId,
@@ -373,7 +376,7 @@ export function useEvmTransaction(
   const sendTransaction = useCallback(
     async (params: SendTransactionParams): Promise<void> => {
       // V2-FE-100 readiness gate — fail closed before PREPARE
-      const gate = evaluateWriteTarget({
+      const gate = evaluateWalletWriteReadiness({
         account: address ?? null,
         chainId,
         expectedChainId,

@@ -1,58 +1,4 @@
-import type { TransactionStatus as MachineStatus } from "@/lib/transaction-machine/transaction-machine.types";
-
-type LegacyStatus = "idle" | "pending" | "success" | "error";
-type PresentationStatus =
-  | "confirmed"
-  | "rejected"
-  | "reorged"
-  | "stale"
-  | "failed";
-export type TransactionStatusValue =
-  | LegacyStatus
-  | PresentationStatus
-  | MachineStatus;
-
-export interface TransactionStatusMessages {
-  pending: string;
-  success: string;
-  error: string;
-  preparing: string;
-  "signature-requested": string;
-  submitted: string;
-  confirmed: string;
-  confirming: string;
-  safe: string;
-  indexing: string;
-  finalized: string;
-  dropped: string;
-  replaced: string;
-  reverted: string;
-  rejected: string;
-  reorged: string;
-  stale: string;
-  failed: string;
-}
-
-const defaultMessages: TransactionStatusMessages = {
-  pending: "Transaction pending…",
-  success: "Verification submitted",
-  error: "Transaction failed",
-  preparing: "Validating transaction…",
-  "signature-requested": "Waiting for wallet signature…",
-  submitted: "Transaction submitted; waiting for confirmation.",
-  confirmed: "Transaction confirmed; waiting for finality.",
-  confirming: "Transaction confirmed; waiting for finality.",
-  safe: "Transaction is safe; waiting for finality.",
-  indexing: "Transaction finalized; updating account data.",
-  finalized: "Transaction finalized.",
-  dropped: "Transaction was dropped. You can retry.",
-  replaced: "Transaction was replaced. Following the replacement.",
-  reverted: "Transaction reverted. You can retry.",
-  rejected: "You rejected the transaction. You can retry.",
-  reorged: "The transaction was reorganized. Verifying the canonical chain state.",
-  stale: "Transaction status is stale. Refreshing from the canonical chain.",
-  failed: "Transaction failed. You can retry.",
-};
+import React from 'react';
 
 const errorStatuses = new Set<TransactionStatusValue>([
   "error",
@@ -84,28 +30,102 @@ export function TransactionStatus({
 }) {
   if (status === "idle") return null;
 
-  const message = {
-    ...defaultMessages,
-    ...messages,
-  }[status as keyof TransactionStatusMessages];
+  if (status === 'pending') {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex items-center space-x-2 text-gray-600 dark:text-gray-300"
+      >
+        <svg
+          className="animate-spin h-4 w-4 text-blue-500"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          />
+        </svg>
+        <p className="text-sm font-medium">Transaction pending...</p>
+      </div>
+    );
+  }
 
-  if (!message) return null;
+  if (status === 'success') {
+    return (
+      <div
+        role="alert"
+        aria-live="assertive"
+        className="flex items-center space-x-2 text-green-600 dark:text-green-400"
+      >
+        <svg
+          className="h-4 w-4"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path
+            fillRule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+            clipRule="evenodd"
+          />
+        </svg>
+        <p className="text-sm font-medium">Verification submitted</p>
+      </div>
+    );
+  }
 
-  return (
-    <p
-      role={errorStatuses.has(status) ? "alert" : "status"}
-      aria-live={errorStatuses.has(status) ? "assertive" : "polite"}
-      aria-atomic="true"
-      aria-busy={busyStatuses.has(status) ? "true" : undefined}
-      className={
-        errorStatuses.has(status)
-          ? "text-red-600"
-          : status === "success" || status === "finalized"
-            ? "text-green-600"
-            : undefined
-      }
-    >
-      {message}
-    </p>
-  );
+  if (status === 'error') {
+    return (
+      <div
+        role="alert"
+        aria-live="assertive"
+        className="flex flex-col space-y-2 text-red-600 dark:text-red-400"
+      >
+        <div className="flex items-center space-x-2">
+          <svg
+            className="h-4 w-4"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <p className="text-sm font-medium">Transaction failed</p>
+        </div>
+        {errorMessage && (
+          <p className="text-xs text-red-500 dark:text-red-300">
+            {errorMessage}
+          </p>
+        )}
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="self-start text-xs underline hover:text-red-700 dark:hover:text-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded"
+            aria-label="Retry transaction"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }

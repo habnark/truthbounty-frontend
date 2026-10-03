@@ -1,7 +1,8 @@
+
 import { Evidence } from "@/app/types/dispute";
-import { ExternalLink, FileText, LinkIcon } from "lucide-react";
-import { PrivateEvidenceLink } from "@/components/security/PrivateEvidenceLink";
-import { validateEvidenceUri, getSafeEvidenceHref } from "@/lib/validation/evidenceUri";
+import { ExternalLink, FileText, LinkIcon, ShieldAlert } from "lucide-react";
+import { sanitizeText, safeUrl } from "@/lib/security/evidence-sanitizer";
+import { SafeExternalLink } from "@/components/security/SafeExternalLink";
 
 /**
  * V2-FE-075 — Evidence links are untrusted API content. Titles, descriptions
@@ -20,12 +21,9 @@ export const EvidenceLinks = ({ evidences }: { evidences: Evidence[] }) => {
       </div>
       <div className="space-y-3">
         {evidences.map((evidence) => {
-          const title = evidence.title || 'Untitled Evidence';
-          const description = evidence.description || '';
-          const validation = validateEvidenceUri(evidence.url);
-          const safeHref = getSafeEvidenceHref(evidence.url);
-          const title = (evidence as { title?: string }).title ?? '';
-          const description = (evidence as { description?: string }).description ?? '';
+          const title = sanitizeText(evidence.title, 300);
+          const description = sanitizeText(evidence.description, 600);
+          const urlCheck = safeUrl(evidence.url);
 
           return (
             <div
@@ -59,15 +57,16 @@ export const EvidenceLinks = ({ evidences }: { evidences: Evidence[] }) => {
                   className="shrink-0 text-sm text-gray-400 hover:text-white flex items-center transition-colors"
                   aria-label={`View evidence: ${title || description || "link"} (opens in new tab)`}
                 >
-                  View <ExternalLink size={14} className="ml-1" />
-                </a>
+                  View <ExternalLink size={14} className="ml-1" aria-hidden="true" />
+                </SafeExternalLink>
               ) : (
                 <span
                   className="shrink-0 text-sm text-gray-600 flex items-center"
                   role="img"
                   aria-label="Evidence link blocked for security reasons"
                 >
-                  Invalid URI
+                  <ShieldAlert size={14} className="mr-1" aria-hidden="true" />
+                  Blocked link
                 </span>
               )}
             </div>

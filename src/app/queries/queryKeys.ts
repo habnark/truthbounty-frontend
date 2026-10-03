@@ -1,7 +1,8 @@
 /**
- * Canonical TanStack Query key factories (V2-FE-063).
+ * Canonical TanStack Query key factories (V2-FE-020 & V2-FE-063).
  *
- * Covers chain, wallet, claim, projection watermark, filters, and finality
+ * Covers chain, wallet, claim, evidence, rounds, disputes, verifications,
+ * rewards, reputation, projection watermark, filters, finality, and user
  * so cache entries cannot collide across wallets, chains, or projections.
  *
  * Rules:
@@ -109,7 +110,7 @@ export const walletKeys = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Claim (preserves legacy shapes + adds list / wallet / finality)
+// Claim (preserves legacy shapes + adds list / wallet / finality / lifecycle)
 // ---------------------------------------------------------------------------
 export const claimKeys = {
   /** Legacy root — invalidate entire claims namespace. */
@@ -133,8 +134,85 @@ export const claimKeys = {
       ? (['claims', 'wallet', scope.address, scope.chainId] as const)
       : (['claims', 'wallet', 'invalid'] as const);
   },
-  finality: (claimId: string, chainId: ChainId) =>
-    ['claims', 'finality', claimId, chainId] as const,
+  finality: (claimId: string, chainId?: ChainId) =>
+    chainId !== undefined
+      ? (['claims', 'finality', claimId, chainId] as const)
+      : (['claims', 'finality', claimId] as const),
+} as const;
+
+export const claimsKeys = claimKeys;
+
+// ---------------------------------------------------------------------------
+// Evidence
+// ---------------------------------------------------------------------------
+export const evidenceKeys = {
+  /** Invalidate all evidence. */
+  all: ['evidence'] as const,
+  /** All evidence items for a given claim. */
+  byClaim: (claimId: string) => ['evidence', 'claim', claimId] as const,
+  /** Single evidence item. */
+  detail: (evidenceId: string) => ['evidence', 'detail', evidenceId] as const,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Rounds
+// ---------------------------------------------------------------------------
+export const roundsKeys = {
+  /** Invalidate all rounds. */
+  all: ['rounds'] as const,
+  /** Rounds for a specific claim. */
+  byClaim: (claimId: string) => ['rounds', 'claim', claimId] as const,
+  /** Single round detail. */
+  detail: (roundId: string) => ['rounds', 'detail', roundId] as const,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Disputes
+// ---------------------------------------------------------------------------
+export const disputesKeys = {
+  /** Invalidate all disputes. */
+  all: ['disputes'] as const,
+  /** Disputes associated with a specific claim. */
+  byClaim: (claimId: string) => ['disputes', 'claim', claimId] as const,
+  /** Single dispute detail. */
+  detail: (disputeId: string) => ['disputes', disputeId] as const,
+  /** Dispute finality projection. */
+  finality: (disputeId: string) => ['disputes', 'finality', disputeId] as const,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Verifications (kept for backward compatibility; formerly top-level)
+// ---------------------------------------------------------------------------
+export const verificationsKeys = {
+  all: ['verifications'] as const,
+  byClaim: (claimId: string) => ['verifications', 'claim', claimId] as const,
+  byUser: (userId: string) => ['verifications', 'user', userId] as const,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Rewards
+// ---------------------------------------------------------------------------
+export const rewardsKeys = {
+  /** Invalidate all rewards. */
+  all: ['rewards'] as const,
+  /** Claimable rewards for a wallet address. */
+  claimable: (address: string) => ['rewards', 'claimable', address] as const,
+  /** Historical reward log for a wallet address. */
+  history: (address: string) => ['rewards', 'history', address] as const,
+  /** Reward details for a specific claim. */
+  byClaim: (claimId: string) => ['rewards', 'claim', claimId] as const,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Reputation
+// ---------------------------------------------------------------------------
+export const reputationKeys = {
+  /** Invalidate all reputation data. */
+  all: ['reputation'] as const,
+  /** Reputation score for a specific address / userId. */
+  byUser: (userId: string) => ['reputation', 'user', userId] as const,
+  /** Leaderboard snapshot. */
+  leaderboard: ['reputation', 'leaderboard'] as const,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -179,45 +257,41 @@ export const finalityKeys = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Legacy namespaces (unchanged shapes)
+// User (profile + nested sub-resources)
 // ---------------------------------------------------------------------------
-export const verificationsKeys = {
-  all: ['verifications'] as const,
-  byClaim: (claimId: string) => ['verifications', 'claim', claimId] as const,
-  byUser: (userId: string) => ['verifications', 'user', userId] as const,
-} as const;
-
-export const disputesKeys = {
-  all: ['disputes'] as const,
-  byClaim: (claimId: string) => ['disputes', 'claim', claimId] as const,
-  detail: (disputeId: string) => ['disputes', disputeId] as const,
-} as const;
-
 export const userKeys = {
   all: ['user'] as const,
   profile: (userId: string) => ['user', userId] as const,
   reputation: (userId: string) => ['user', userId, 'reputation'] as const,
   verification: (userId: string) => ['user', userId, 'verification'] as const,
+  rewards: (userId: string) => ['user', userId, 'rewards'] as const,
 } as const;
 
+// ---------------------------------------------------------------------------
+// Leaderboard (top-level, distinct from reputation leaderboard)
+// ---------------------------------------------------------------------------
 export const leaderboardKeys = {
   all: ['leaderboard'] as const,
 } as const;
 
 /**
  * Unified export — existing `queryKeys.*` consumers keep working.
- * New V2-FE-063 factories are exposed both nested and as named exports.
+ * Exposes all domain factories both nested and as named exports.
  */
 export const queryKeys = {
   chain: chainKeys,
   wallet: walletKeys,
   claims: claimKeys,
   claim: claimKeys,
+  evidence: evidenceKeys,
+  rounds: roundsKeys,
+  disputes: disputesKeys,
+  verifications: verificationsKeys,
+  rewards: rewardsKeys,
+  reputation: reputationKeys,
   projectionWatermark: projectionWatermarkKeys,
   filters: filterKeys,
   finality: finalityKeys,
-  verifications: verificationsKeys,
-  disputes: disputesKeys,
   leaderboard: leaderboardKeys.all,
   user: userKeys,
 } as const;

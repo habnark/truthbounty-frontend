@@ -10,7 +10,7 @@ import {
   RainbowKitThemedProvider,
   FeatureFlagProvider,
   FeatureFlagPanel,
-  SessionLifecycleProvider,
+  WalletStateGuard,
 } from '@/components/providers';
 import { SiweAuthProvider } from '@/context/SiweAuthProvider';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
@@ -29,13 +29,11 @@ export function Providers({ children }: ProvidersProps) {
             <SiweAuthProvider>
               <FeatureFlagProvider enablePersistence={true}>
                 <ErrorBoundary>
-                  <IntegrityBoundary>
-                    <SessionLifecycleProvider>
-                      {children}
-                      {/* Feature flag panel for development debugging */}
-                      <FeatureFlagPanel defaultOpen={false} position="bottom-right" />
-                    </SessionLifecycleProvider>
-                  </IntegrityBoundary>
+                  <WalletStateGuard>
+                    {children}
+                    {/* Feature flag panel for development debugging */}
+                    <FeatureFlagPanel defaultOpen={false} position="bottom-right" />
+                  </WalletStateGuard>
                 </ErrorBoundary>
               </FeatureFlagProvider>
             </SiweAuthProvider>

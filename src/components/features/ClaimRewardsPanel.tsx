@@ -289,7 +289,7 @@ export default function ClaimRewardsPanel({
                     {reward.categoryExplanation || (reward as { title?: string }).title}
                   </p>
                   <p className="text-[#71717a] text-xs">
-                    {reward.category ? reward.category.replace(/_/g, " ") : "Reward"} · {reward.amountRaw}
+                    {(reward.category ?? "").replace(/_/g, " ")} · {reward.amountRaw}
                   </p>
                 </div>
               </div>

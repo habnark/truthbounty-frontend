@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { initialUploadState, uploadReducer } from "./uploadMachine";
 import { sha256Hex } from "./hash";
-import type { UploadClient, UploadFailure } from "./types";
+import type { UploadClient, UploadFailure, FileInfo } from "./types";
 
 export type UploadConfig = {
   client: UploadClient | null; // null = missing config -> fail closed
@@ -48,16 +48,21 @@ export function useEvidenceUpload(cfg: UploadConfig) {
 
   const start = useCallback(
     async (file: File) => {
+      const fileInfo: FileInfo = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      };
       if (!cfg.allowedTypes.includes(file.type)) {
-        dispatch({ type: "START" });
+        dispatch({ type: "START", fileInfo });
         return dispatch({ type: "FAIL", failure: "unsupported-type" });
       }
       if (file.size > cfg.maxBytes) {
-        dispatch({ type: "START" });
+        dispatch({ type: "START", fileInfo });
         return dispatch({ type: "FAIL", failure: "too-large" });
       }
       fileRef.current = file;
-      dispatch({ type: "START" });
+      dispatch({ type: "START", fileInfo });
       try {
         const digest = await sha256Hex(file);
         dispatch({ type: "HASHED", digest });

@@ -95,6 +95,21 @@ Every user-facing surface that touches protocol state must support the applicabl
 
 **Legend:** ✅ required • — not applicable
 
+### Canonical claim detail projection
+
+The route-backed claim detail surface reads `GET /api/claims/:id` only through
+the validated `ClaimDetailEnvelope` parser. A bare legacy claim response is
+malformed and is never rendered as protocol state. The detail view exposes:
+
+- `loading`: skeleton while the projection is requested;
+- `ready`: validated claim and evidence with fresh projection metadata;
+- `ready-stale`: validated content with an amber freshness warning and refresh
+	action when the server reports `stale` or `degraded`;
+- `not-found`: the canonical `404` state;
+- `failed`: unavailable, malformed, or rebuilding projections with a retry;
+- empty evidence: an honest “No evidence available” state. The client never
+	inserts sample links, images, or testimony.
+
 ---
 
 ## 4. State Contract (per state)
